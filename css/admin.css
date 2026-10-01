@@ -1,0 +1,471 @@
+/* ============================================================
+   ShanChaStore - admin.css
+   Trang quản trị admin: sidebar, bảng, form CRUD, dashboard.
+   ============================================================ */
+
+.admin-body {
+  background: #f5f1e9;
+  display: flex;
+  min-height: 100dvh;
+}
+
+/* ---------- Sidebar ---------- */
+.admin-sidebar {
+  width: 250px;
+  background: #35261a;
+  color: #e8dcc8;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  overflow: hidden;
+}
+.admin-sidebar .admin-brand {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+.admin-sidebar .admin-brand img {
+  height: 34px;
+}
+.admin-sidebar .admin-brand .brand-text {
+  color: #f2c4a0;
+  font-weight: 900;
+  font-size: 1.05rem;
+  line-height: 1;
+  display: block;
+}
+.admin-sidebar .admin-brand .brand-text::after {
+  content: "";
+  display: block;
+  height: 3px;
+  width: 100%;
+  background: linear-gradient(90deg, #f2c4a0, transparent);
+  border-radius: 999px;
+  margin-top: 4px;
+}
+/* 2 cột sidebar tách riêng, mỗi cột tự cuộn mượt */
+.admin-sidebar .sidebar-col {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+.admin-sidebar .sidebar-group-label {
+  padding: 14px 22px 4px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(232, 220, 200, 0.55);
+}
+.admin-sidebar .admin-nav {
+  padding: 4px 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.admin-nav button,
+.admin-nav .nav-sys-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: #e8dcc8;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 12px 14px;
+  border-radius: 10px;
+  text-align: left;
+  text-decoration: none;
+  transition: 0.2s;
+  cursor: pointer;
+}
+.admin-nav button:hover,
+.admin-nav .nav-sys-link:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.admin-nav button.active {
+  background: var(--accent);
+  color: #fff;
+}
+/* cột hệ thống luôn hiện ở dưới cùng, đầy màu */
+.admin-sidebar .sidebar-sys-col {
+  flex-shrink: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 10px 14px;
+  background: #2b1f14;
+}
+.admin-sidebar .nav-sys-link,
+.admin-sidebar #admin-logout {
+  background: rgba(255, 255, 255, 0.06);
+}
+.admin-sidebar #admin-logout {
+  width: 100%;
+  border-radius: 10px;
+  color: #ffd9c9;
+  font-weight: 800;
+}
+.admin-sidebar #admin-logout:hover {
+  background: #b3452f;
+  color: #fff;
+}
+
+/* ---------- Main ---------- */
+.admin-main {
+  flex: 1;
+  padding: 28px 32px;
+  min-width: 0;
+}
+.admin-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.admin-top h1 {
+  font-size: 1.5rem;
+  font-weight: 900;
+}
+.admin-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* ---------- KPI cards ---------- */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 18px;
+  margin-bottom: 26px;
+  align-items: stretch;
+}
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  box-shadow: 0 4px 14px rgba(90, 60, 30, 0.06);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 118px;
+}
+.kpi-card .kpi-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.kpi-card .kpi-value {
+  font-size: 1.7rem;
+  font-weight: 900;
+  color: var(--primary);
+  margin-top: 6px;
+}
+.kpi-card .kpi-sub {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ---------- Panel / bảng ---------- */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px;
+  margin-bottom: 24px;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.panel-head h2 {
+  font-size: 1.1rem;
+  font-weight: 900;
+}
+
+.admin-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.admin-toolbar input,
+.admin-toolbar select {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+.admin-toolbar input {
+  min-width: 180px;
+  flex: 1 1 200px;
+  max-width: 320px;
+}
+.admin-toolbar select {
+  flex: 0 1 auto;
+}
+
+.thumb {
+  width: 46px;
+  height: 46px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: var(--bg-soft);
+}
+
+.row-actions {
+  display: flex;
+  gap: 6px;
+}
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  font-size: 0.9rem;
+  transition: 0.2s;
+}
+.icon-btn:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.icon-btn.danger:hover {
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+/* ---------- Form CRUD ---------- */
+.crud-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 4px 0;
+}
+.crud-form .full {
+  grid-column: 1 / -1;
+}
+.crud-form label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+.crud-form input,
+.crud-form select,
+.crud-form textarea {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+}
+/* checkbox không phải input dạng ô — tránh bị phình to như input thường */
+.crud-form input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  margin: 0 6px 0 0;
+  vertical-align: middle;
+  accent-color: var(--accent, #c97b4a);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.crud-form label.inline-check {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 600;
+  margin: 0;
+  cursor: pointer;
+  user-select: none;
+}
+.crud-form .img-hint {
+  margin-top: 6px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+.crud-form .img-hint b {
+  color: var(--accent, #c97b4a);
+}
+.crud-form textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+.crud-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* ---------- Modal admin ---------- */
+.modal .modal-card.small {
+  max-width: 560px;
+}
+.detail-line {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--line);
+  font-size: 0.92rem;
+}
+.detail-line b {
+  color: var(--ink);
+}
+
+/* ---------- Chart bars ---------- */
+.chart-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  height: 150px;
+  margin-top: 14px;
+}
+.chart-bar {
+  flex: 1;
+  background: linear-gradient(180deg, var(--accent), var(--primary));
+  border-radius: 8px 8px 0 0;
+  min-height: 4px;
+  position: relative;
+  transition: 0.2s;
+}
+.chart-bar:hover {
+  opacity: 0.85;
+}
+.chart-bar .chart-val {
+  position: absolute;
+  top: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--primary);
+  white-space: nowrap;
+}
+.chart-labels {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+.chart-labels span {
+  flex: 1;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* ---------- Login admin guard ---------- */
+.admin-gate {
+  display: none;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 860px) {
+  .admin-sidebar {
+    width: 74px;
+  }
+  .admin-sidebar .admin-brand img {
+    width: 34px;
+  }
+  .admin-nav button span {
+    display: none;
+  }
+  .admin-main {
+    padding: 20px 16px;
+  }
+  .crud-form {
+    grid-template-columns: 1fr;
+  }
+  .admin-sidebar .sidebar-group-label {
+    padding-left: 14px;
+  }
+  .admin-sidebar .sidebar-sys-col {
+    padding: 6px 8px 10px;
+  }
+}
+
+/* Tag km + mã giảm giá trên bảng đơn hàng */
+.order-promo-tag {
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--ok);
+}
+.order-km-tag {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+/* ---------- Bảng đánh giá (view Đánh giá) ---------- */
+.stars {
+  color: var(--accent);
+  font-size: 0.95rem;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+.review-comment {
+  font-size: 0.85rem;
+  color: var(--ink);
+  white-space: normal;
+  word-break: break-word;
+  min-width: 160px;
+}
+/* Bảng đánh giá: cố định cột cho không bị lệch, nội dung dài hiện đủ */
+#adm-reviews-table,
+#adm-site-reviews-table,
+#site-reviews-table,
+#adm-creviews-table {
+  table-layout: fixed;
+}
+#adm-reviews-table td:nth-child(4),
+#adm-reviews-table th:nth-child(4),
+#adm-site-reviews-table td:nth-child(3),
+#adm-site-reviews-table th:nth-child(3),
+#site-reviews-table td:nth-child(3),
+#site-reviews-table th:nth-child(3),
+#adm-creviews-table td:nth-child(2),
+#adm-creviews-table th:nth-child(2) {
+  width: 38%;
+  white-space: normal;
+}
+#adm-reviews-table td,
+#adm-site-reviews-table td,
+#site-reviews-table td,
+#adm-creviews-table td {
+  white-space: normal;
+  word-break: break-word;
+}
+#adm-reviews-table td:not([class]),
+#adm-site-reviews-table td,
+#site-reviews-table td:not([class]) {
+  white-space: normal;
+}
+.filter-select {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  max-width: 100%;
+}

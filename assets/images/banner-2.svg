@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="800" viewBox="0 0 1920 800" role="img" aria-label="Banner Signature Tea">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#DFEBD2"/>
+      <stop offset="0.5" stop-color="#9CB380"/>
+      <stop offset="1" stop-color="#4F6F33"/>
+    </linearGradient>
+    <linearGradient id="cup2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#EAF2DC"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="800" fill="url(#bg2)"/>
+  <circle cx="320" cy="180" r="430" fill="rgba(255,255,255,0.18)"/>
+  <circle cx="1650" cy="620" r="380" fill="rgba(255,255,255,0.12)"/>
+  <!-- lá chè trang trí -->
+  <g fill="rgba(60,85,38,0.8)">
+    <path d="M1180 180 q 40 -30 78 0 q -20 34 -78 18 q -56 16 -78 -18 q 38 -30 78 0 Z" transform="rotate(-14 1180 180)"/>
+    <path d="M1300 130 q 34 -26 68 0 q -18 30 -68 16 q -48 14 -68 -16 q 34 -26 68 0 Z" transform="rotate(10 1300 130)"/>
+    <path d="M1080 280 q 28 -22 56 0 q -15 26 -56 14 q -40 12 -56 -14 q 28 -22 56 0 Z" transform="rotate(20 1080 280)"/>
+  </g>
+  <!-- ấm trà + chén bên phải -->
+  <g transform="translate(1380,300)">
+    <ellipse cx="0" cy="0" rx="120" ry="34" fill="url(#cup2)" opacity="0.95"/>
+    <path d="M-100 8 L-84 230 Q -34 282 0 282 Q 34 282 84 230 L100 8 Z" fill="url(#cup2)" opacity="0.95"/>
+    <ellipse cx="0" cy="8" rx="100" ry="26" fill="#6E8B3D"/>
+    <ellipse cx="0" cy="8" rx="80" ry="19" fill="#8FA55A"/>
+    <path d="M96 30 Q 158 22 156 84 Q 154 138 94 118" fill="none" stroke="#4F6F33" stroke-width="12" stroke-linecap="round"/>
+    <path d="M-122 282 h 244" stroke="rgba(255,255,255,0.75)" stroke-width="6" stroke-linecap="round"/>
+    <!-- chén nhỏ -->
+    <ellipse cx="-210" cy="252" rx="44" ry="13" fill="#FFFFFF" opacity="0.95"/>
+    <path d="M-246 258 L-240 306 Q -218 322 -210 322 Q -202 322 -180 306 L-174 258 Z" fill="#FFFFFF" opacity="0.95"/>
+    <ellipse cx="-210" cy="258" rx="36" ry="9" fill="#6E8B3D"/>
+  </g>
+  <rect x="90" y="80" width="470" height="10" rx="5" fill="rgba(255,255,255,0.85)"/>
+</svg>

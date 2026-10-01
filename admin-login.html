@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Đăng nhập quản trị – ShanCha Store</title>
+  <meta name="description" content="Trang đăng nhập dành cho quản trị viên ShanCha Store. Chỉ quản trị viên mới được truy cập trang quản trị.">
+  <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .admin-login-body {
+      background: linear-gradient(160deg, #35261A 0%, #4d3320 55%, #7A4E2D 100%);
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .admin-login-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--surface);
+      border-radius: 18px;
+      box-shadow: 0 24px 60px rgba(0,0,0,.35);
+      padding: 34px 32px 30px;
+      text-align: center;
+    }
+    .admin-login-card .brand-img { height: 44px; margin-bottom: 4px; }
+    .admin-login-card .brand-text { color: #F2C4A0; font-size: 1.35rem; font-weight: 900; display: inline-block; margin-bottom: 4px; }
+    .admin-login-card .brand-text::after { content: ''; display: block; height: 3px; width: 100%; background: linear-gradient(90deg, #F2C4A0, transparent); border-radius: 999px; margin-top: 3px; }
+    .admin-login-title { font-size: 1.25rem; font-weight: 900; margin: 10px 0 2px; }
+    .admin-login-sub { font-size: .85rem; color: var(--muted); margin-bottom: 22px; }
+    .admin-login-card .form-group { text-align: left; }
+    .admin-login-shield {
+      width: 52px; height: 52px; margin: 0 auto 6px; border-radius: 50%;
+      background: var(--bg-soft); display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem;
+    }
+    .admin-login-links { margin-top: 18px; font-size: .83rem; color: var(--muted); }
+    .admin-login-links a { color: var(--primary); font-weight: 700; }
+  </style>
+</head>
+<body class="admin-login-body">
+
+  <!-- ============================================================
+       TRANG ĐĂNG NHẬP QUẢN TRỊ (admin-login.html)
+       - Chỉ dành cho tài khoản có role = admin.
+       - Nếu đã đăng nhập admin -> vào thẳng admin.html.
+       - Nếu đang là khách thường -> hiện nút "Đăng xuất & đăng nhập lại".
+       - Tài khoản demo: admin / admin123.
+       ============================================================ -->
+  <div class="admin-login-card">
+    <div class="admin-login-shield"><span class="ic-big" data-ic="lock"></span></div>
+    <div class="admin-brand" id="admin-login-brand"></div>
+    <div class="admin-login-title">Khu vực quản trị</div>
+    <div class="admin-login-sub">Vui lòng đăng nhập với tài khoản <b>admin</b> để quản lý website</div>
+
+    <form id="admin-login-form" novalidate>
+      <div class="form-group">
+        <label for="al-user">Tên đăng nhập</label>
+        <input type="text" id="al-user" placeholder="admin" autocomplete="username">
+        <div class="error">Vui lòng nhập tên đăng nhập.</div>
+      </div>
+      <div class="form-group">
+        <label for="al-pass">Mật khẩu</label>
+        <input type="password" id="al-pass" placeholder="••••••" autocomplete="current-password">
+        <div class="error">Vui lòng nhập mật khẩu.</div>
+      </div>
+      <button class="btn btn-primary btn-block" type="submit">Đăng nhập quản trị</button>
+    </form>
+
+    <div class="admin-login-links">
+      Tài khoản demo: <b>admin / admin123</b> &nbsp;·&nbsp; <a href="index.html"><span class="nav-ic" data-ic="chevL"></span> Về trang chủ</a>
+    </div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script>
+    document.querySelectorAll('[data-ic]').forEach(el => { const nm = el.dataset.ic; if (nm && UI.icon) el.innerHTML = UI.icon(nm); });
+    (async function renderBrand() {
+      await Store.ready;
+      var box = document.getElementById('admin-login-brand');
+      if (!box) return;
+      var s = Store.getSettings();
+      if (s.logo && s.logo !== 'assets/images/logo.svg') {
+        box.innerHTML = '<img class="brand-img" src="' + UI.esc(s.logo) + '" alt="' + UI.esc(s.siteName) + '">';
+      } else {
+        box.innerHTML = '<span class="brand-text">' + UI.esc(s.siteName || 'ShanCha Store') + '</span>';
+      }
+    })();
+  </script>
+  <script src="js/admin-login.js"></script>
+</body>
+</html>

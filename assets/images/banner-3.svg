@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="800" viewBox="0 0 1920 800" role="img" aria-label="Banner Flash Sale">
+  <defs>
+    <linearGradient id="bg3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F2C4A0"/>
+      <stop offset="0.55" stop-color="#C97B4A"/>
+      <stop offset="1" stop-color="#7A4E2D"/>
+    </linearGradient>
+    <linearGradient id="cup3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F5E3CC"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="800" fill="url(#bg3)"/>
+  <circle cx="1560" cy="180" r="430" fill="rgba(255,255,255,0.16)"/>
+  <circle cx="330" cy="620" r="380" fill="rgba(255,255,255,0.1)"/>
+  <!-- tia sáng flash -->
+  <g stroke="rgba(255,255,255,0.5)" stroke-width="5" stroke-linecap="round">
+    <path d="M1480 120 L1492 96 M1540 96 L1548 70 M1600 120 L1612 96 M1544 150 L1544 128"/>
+  </g>
+  <!-- cốc trà sữa lớn -->
+  <g transform="translate(1330,300)">
+    <ellipse cx="0" cy="0" rx="140" ry="40" fill="url(#cup3)" opacity="0.96"/>
+    <path d="M-118 10 L-100 260 Q -42 314 0 314 Q 42 314 100 260 L118 10 Z" fill="url(#cup3)" opacity="0.96"/>
+    <ellipse cx="0" cy="10" rx="118" ry="32" fill="#A9702F"/>
+    <ellipse cx="0" cy="10" rx="94" ry="24" fill="#D9A05B"/>
+    <!-- trân châu -->
+    <circle cx="-44" cy="14" r="9" fill="#3A2417"/>
+    <circle cx="-20" cy="4" r="9" fill="#3A2417"/>
+    <circle cx="8" cy="16" r="9" fill="#3A2417"/>
+    <circle cx="36" cy="6" r="9" fill="#3A2417"/>
+    <circle cx="62" cy="14" r="9" fill="#3A2417"/>
+    <path d="M-30 10 q 14 -26 26 -6 q 12 4 2 16 q -14 8 -28 -10 Z" fill="#E8B87A" opacity="0.95"/>
+    <path d="M112 30 Q 186 20 184 92 Q 182 156 114 134" fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" opacity="0.95"/>
+    <path d="M-140 314 h 280" stroke="rgba(255,255,255,0.75)" stroke-width="6" stroke-linecap="round"/>
+    <!-- ống hút -->
+    <rect x="-190" y="-130" width="16" height="210" rx="8" fill="#FFFFFF" opacity="0.9"/>
+    <rect x="-190" y="-130" width="16" height="46" rx="8" fill="#E8B87A" opacity="0.9"/>
+  </g>
+  <rect x="90" y="80" width="470" height="10" rx="5" fill="rgba(255,255,255,0.85)"/>
+</svg>

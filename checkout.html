@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thanh toán – ShanCha Store</title>
+  <meta name="description" content="Thanh toán đơn hàng ShanCha Store. Bạn phải đăng nhập để đặt hàng.">
+  <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="lib/leaflet.css">
+</head>
+<body>
+
+  <header class="site-header" id="site-header"></header>
+
+  <!-- ============================================================
+       TRANG THANH TOÁN (checkout.html)
+       - Cột trái : form nhập thông tin giao hàng + chọn điểm trên bản đồ
+                    (Leaflet) + mã giảm giá + phương thức thanh toán.
+       - Cột phải : tóm tắt đơn (tạm tính, phí ship, giảm giá, tổng cộng).
+       - BẢO VỆ   : chưa đăng nhập thì checkout.js hiện thông báo và không cho đặt.
+       - Nút "Đặt hàng ngay": gửi đơn lên server (server tính lại giá từ DB).
+       - Màn hình thành công: hiện mã đơn + tổng tiền sau khi đặt xong.
+       ============================================================ -->
+  <main>
+    <section class="section">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-eyebrow">Thanh toán</span>
+          <h2 class="section-title">Xác nhận đơn hàng</h2>
+        </div>
+
+        <div id="checkout-layout">
+          <div class="story-grid" style="grid-template-columns:1.2fr 1fr;gap:28px">
+            <!-- Cột trái: form giao hàng -->
+            <div class="form-card" style="max-width:none;box-shadow:none;border-radius:var(--radius)">
+              <h3 style="margin-bottom:16px">Thông tin giao hàng</h3>
+              <div class="form-group">
+                <label for="co-name">Họ tên *</label>
+                <input type="text" id="co-name" placeholder="Nguyễn Văn A">
+                <div class="error">Vui lòng nhập họ tên.</div>
+              </div>
+              <div class="form-group">
+                <label for="co-phone">Số điện thoại *</label>
+                <input type="tel" id="co-phone" placeholder="0901234567">
+                <div class="error">SĐT không đúng định dạng (VD: 0901234567).</div>
+              </div>
+              <div class="form-group">
+                <label for="co-email">Email</label>
+                <input type="email" id="co-email" placeholder="you@email.com">
+                <div class="error">Email không đúng định dạng.</div>
+              </div>
+              <div class="form-group">
+                <label for="co-address">Địa chỉ nhận hàng *</label>
+                <textarea id="co-address" rows="2" placeholder="Số nhà, đường, phường, quận…"></textarea>
+                <div class="error">Vui lòng nhập địa chỉ.</div>
+              </div>
+              <div class="form-group" id="co-map-group">
+                <label>Điểm giao trên bản đồ <span style="color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0">(chọn để tính phí ship theo khoảng cách)</span></label>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-open-map">Chọn vị trí trên bản đồ</button>
+                <div id="co-map-status" class="map-status"></div>
+              </div>
+              <div class="form-group">
+                <label for="co-note">Ghi chú</label>
+                <textarea id="co-note" rows="2" placeholder="Ít đường, thêm đá…"></textarea>
+              </div>
+              <div class="form-group">
+                <label for="co-store">Nhận tại cửa hàng / Giao hàng</label>
+                <select id="co-store">
+                  <option value="">Giao tận nơi (phí ship theo khoảng cách)</option>
+                  <option value="cn1">ShanCha – CN1 (38 Lê Lợi, Q.1)</option>
+                  <option value="cn2">ShanCha – CN2 (58D Trần Quốc Thảo, Q.3)</option>
+                  <option value="cn3">ShanCha – CN3 (340D Hoàng Văn Thụ, Tân Bình)</option>
+                  <option value="dl1">ShanCha Signature – Đà Lạt</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="co-promo">Mã giảm giá (nếu có)</label>
+                <div class="promo-row">
+                  <input type="text" id="co-promo" placeholder="VD: FREESHIP, SHANCHA10, GIAM20K" autocomplete="off">
+                  <button type="button" class="btn btn-outline btn-sm" id="btn-promo" style="white-space:nowrap">Áp dụng</button>
+                </div>
+                <div id="co-promo-msg" class="promo-msg"></div>
+              </div>
+              <div class="form-group">
+                <label for="co-pay">Phương thức thanh toán</label>
+                <select id="co-pay">
+                  <option value="cod">Thanh toán khi nhận hàng (COD)</option>
+                  <option value="bank">Chuyển khoản</option>
+                  <option value="card">Thẻ tín dụng</option>
+                </select>
+              </div>
+              <button class="btn btn-primary btn-block" id="btn-place">Đặt hàng ngay</button>
+            </div>
+
+            <!-- Cột phải: tóm tắt giỏ hàng -->
+            <div class="form-card" style="max-width:none;box-shadow:none;border-radius:var(--radius)">
+              <h3 style="margin-bottom:16px">Đơn hàng của bạn</h3>
+              <div id="co-items"></div>
+              <hr style="border:none;border-top:1px dashed var(--line);margin:14px 0">
+              <div class="detail-line"><span>Tạm tính</span><b id="co-subtotal"></b></div>
+              <div class="detail-line"><span>Phí giao hàng<span id="co-ship-tag" class="sum-tag"></span></span><b id="co-ship"></b></div>
+              <div class="detail-line" id="co-discount-line" style="display:none"><span>Giảm giá<span id="co-discount-tag" class="sum-tag"></span></span><b id="co-discount" style="color:var(--ok)"></b></div>
+              <div class="detail-line"><span style="font-weight:900;font-size:1.05rem">Tổng cộng</span><b id="co-total" style="color:var(--primary);font-size:1.25rem"></b></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Màn hình thành công -->
+        <div id="co-success" style="display:none;text-align:center;padding:40px 0">
+          <div style="font-size:4rem"></div>
+          <h2 style="font-size:1.9rem;margin:14px 0 8px">Đặt hàng thành công!</h2>
+          <p class="section-desc">Mã đơn của bạn: <b id="co-code" style="color:var(--primary);font-size:1.2rem"></b></p>
+          <p class="section-desc" id="co-success-msg"></p>
+          <div style="margin-top:24px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+            <a class="btn btn-primary" href="index.html">Về trang chủ</a>
+            <a class="btn btn-outline" href="products.html">Tiếp tục mua sắm</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer" id="site-footer"></footer>
+
+  <script src="js/data.js"></script>
+  <script src="lib/leaflet.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="js/checkout.js"></script>
+</body>
+</html>

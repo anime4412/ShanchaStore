@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ShanCha Store – Đậm trà, thơm hương</title>
+    <meta
+      name="description"
+      content="ShanCha Store – thương hiệu trà và thức uống hiện đại với nguyên liệu chọn lọc từ vùng cao Đà Lạt. Đặt hàng online nhanh chóng."
+    />
+    <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <header class="site-header" id="site-header"></header>
+
+    <main>
+      <!-- ===== HERO SLIDER (yêu cầu Y1.3: slider có điều khiển bằng JS)
+         Nội dung banner (ảnh, tiêu đề, link) render từ bảng banners (SQLite) qua main.js. ===== -->
+      <section class="hero" aria-label="Banner quảng cáo">
+        <div class="slider" id="hero-slider"></div>
+      </section>
+
+      <!-- ===== SẢN PHẨM THEO NHÓM (Y1.2: Mới / Hot / Khuyến mãi) ===== -->
+      <section class="section" id="products">
+        <div class="container">
+          <div class="section-head">
+            <span class="section-eyebrow">Menu ShanCha</span>
+            <h2 class="section-title">Thức uống signature</h2>
+            <p class="section-desc">
+              Pha chế thủ công từ nguyên liệu hảo hạng, công thức truyền thống
+              chuẩn vị.
+            </p>
+          </div>
+          <div
+            class="group-tabs"
+            id="group-tabs"
+            role="tablist"
+            aria-label="Nhóm sản phẩm"
+          >
+            <button class="group-tab active" data-group="all" role="tab">
+              Tất cả
+            </button>
+            <button class="group-tab" data-group="new" role="tab">
+              Sản phẩm mới
+            </button>
+            <button class="group-tab" data-group="hot" role="tab">
+              Sản phẩm hot
+            </button>
+            <button class="group-tab" data-group="sale" role="tab">
+              Sản phẩm khuyến mãi
+            </button>
+          </div>
+          <div class="product-grid" id="product-grid"></div>
+          <div style="text-align: center; margin-top: 32px">
+            <a class="btn btn-outline" href="products.html"
+              >Xem toàn bộ menu <span class="ic-inline" data-ic="chevR"></span
+            ></a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== CÂU CHUYỆN THƯƠNG HIỆU (render từ settings qua main.js) ===== -->
+      <section class="section" id="story" style="background: var(--bg-soft)">
+        <div class="container story-grid">
+          <div class="story-imgs" id="story-imgs"></div>
+          <div class="story-text" id="story-text">
+            <span class="section-eyebrow">Câu chuyện ShanCha</span>
+            <h2>ShanCha – “Sơn Trà” hay còn hiểu là “trà trên núi”</h2>
+            <div id="story-paras"></div>
+            <div class="story-stats" id="story-stats"></div>
+            <div style="margin-top: 26px">
+              <a class="btn btn-primary" href="products.html">Tìm hiểu thêm</a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== FLASH SALE + COUNTDOWN (chức năng nâng cao 1) ===== -->
+      <section class="section flash-sale" id="sale">
+        <div class="container flash-grid">
+          <div class="flash-info">
+            <span class="section-eyebrow">Flash Sale</span>
+            <h2>
+              Giảm đến
+              <span style="color: var(--accent-soft)" id="flash-percent"
+                >-30%</span
+              >
+              hôm nay
+            </h2>
+            <p>
+              Áp dụng cho các món thuộc nhóm Khuyến mãi. Nhanh tay trước khi hết
+              giờ!
+            </p>
+            <div
+              class="countdown"
+              id="countdown"
+              aria-label="Đồng hồ đếm ngược flash sale"
+            >
+              <div class="countdown-box">
+                <b id="cd-d">00</b><span>Ngày</span>
+              </div>
+              <div class="countdown-box">
+                <b id="cd-h">00</b><span>Giờ</span>
+              </div>
+              <div class="countdown-box">
+                <b id="cd-m">00</b><span>Phút</span>
+              </div>
+              <div class="countdown-box">
+                <b id="cd-s">00</b><span>Giây</span>
+              </div>
+            </div>
+            <div style="margin-top: 22px">
+              <a class="btn btn-accent" href="products.html?group=sale"
+                >Mua ngay</a
+              >
+            </div>
+          </div>
+          <div class="flash-img">
+            <img src="assets/images/banner-3.svg" alt="Flash Sale banner" />
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== DANH MỤC SẢN PHẨM ===== -->
+      <section class="section" id="categories">
+        <div class="container">
+          <div class="section-head">
+            <span class="section-eyebrow">Danh mục</span>
+            <h2 class="section-title">Chọn theo sở thích</h2>
+          </div>
+          <div class="cat-grid" id="cat-grid"></div>
+        </div>
+      </section>
+
+      <!-- ===== CHI NHÁNH + GEOLOCATION (chức năng nâng cao 2) ===== -->
+      <section class="section" id="stores" style="background: var(--bg-soft)">
+        <div class="container">
+          <div class="section-head">
+            <span class="section-eyebrow">Cửa hàng</span>
+            <h2 class="section-title">Chi nhánh ShanCha</h2>
+            <p class="section-desc">
+              Ghé chi nhánh gần bạn để takeaway nhanh hoặc ngồi lại thư giãn.
+            </p>
+            <div style="margin-top: 18px">
+              <button class="btn btn-primary" id="btn-geolocate">
+                <span class="ic-inline" data-ic="loc"></span> Tìm chi nhánh gần
+                nhất
+              </button>
+            </div>
+            <p
+              class="section-desc"
+              id="geo-status"
+              style="margin-top: 12px"
+            ></p>
+          </div>
+          <div class="stores-grid" id="stores-grid"></div>
+        </div>
+      </section>
+
+      <!-- ===== NHẬN XÉT KHÁCH HÀNG (render từ bảng customer_reviews qua main.js) ===== -->
+      <section class="section" id="reviews">
+        <div class="container">
+          <div class="section-head">
+            <span class="section-eyebrow">Khách hàng nói gì</span>
+            <h2 class="section-title">Yêu từ ngụm trà đầu tiên</h2>
+          </div>
+          <div class="review-grid" id="customer-review-grid"></div>
+        </div>
+      </section>
+
+      <!-- ===== NHẠC QUÁN TRÀ (chức năng nâng cao 3: Media) ===== -->
+      <section class="section" id="music" style="background: var(--bg-soft)">
+        <div class="container">
+          <div class="section-head">
+            <span class="section-eyebrow">Thư giãn</span>
+            <h2 class="section-title">Nhạc quán trà</h2>
+            <p class="section-desc">
+              Bật nhạc nhẹ nhàng trong lúc chọn món. Phát bằng Web Audio API,
+              không cần file.
+            </p>
+          </div>
+          <div class="media-card" style="max-width: 560px; margin: 0 auto">
+            <div class="media-cover">
+              <span class="ic-big" data-ic="music"></span>
+            </div>
+            <div class="media-info">
+              <b>Nhạc quán trà – Chill</b
+              ><span>Giai điệu pentatonic ấm áp</span>
+            </div>
+            <button class="btn btn-accent btn-media" id="btn-media">
+              <span class="ic-inline" data-ic="play"></span> Phát nhạc
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== NEWSLETTER ===== -->
+      <section class="section">
+        <div class="container newsletter">
+          <h2>Nhận ưu đãi mỗi tuần</h2>
+          <p>Đăng ký để nhận mã giảm giá và thông tin món mới từ ShanCha.</p>
+          <form class="newsletter-form" id="newsletter-form" novalidate>
+            <input
+              type="email"
+              id="nl-email"
+              placeholder="Email của bạn"
+              aria-label="Email"
+            />
+            <button class="btn btn-primary" type="submit">Đăng ký</button>
+          </form>
+          <p class="form-hint" id="nl-msg" style="color: var(--muted)"></p>
+        </div>
+      </section>
+      <!-- ===== ĐÁNH GIÁ WEBSITE (đánh giá chung của khách) ===== -->
+      <section
+        class="section"
+        id="site-reviews"
+        style="background: var(--bg-soft)"
+      >
+        <div class="container" style="max-width: 720px">
+          <div class="section-head">
+            <span class="section-eyebrow">Phản hồi</span>
+            <h2 class="section-title">Đánh giá website ShanCha</h2>
+            <p class="section-desc">
+              Bạn thấy website thế nào? Chia sẻ để chúng tôi phục vụ tốt hơn.
+            </p>
+          </div>
+          <div
+            class="form-card"
+            id="site-review-box"
+            style="max-width: 560px; margin: 0 auto 28px"
+          ></div>
+          <div
+            id="site-review-list"
+            style="max-width: 560px; margin: 0 auto"
+          ></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer" id="site-footer"></footer>
+
+    <!-- Scripts (Y2: JS trong thư mục js/) -->
+    <script src="js/data.js"></script>
+    <script src="js/store.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/cart.js"></script>
+    <script src="js/main.js"></script>
+    <script>
+      document.querySelectorAll("[data-ic]").forEach((el) => {
+        const nm = el.dataset.ic;
+        if (nm && UI.icon) el.innerHTML = UI.icon(nm);
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quản trị – ShanCha Store</title>
+  <meta name="description" content="Trang quản trị ShanCha Store: dashboard, quản lý sản phẩm, đơn hàng, khách hàng và cài đặt website.">
+  <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/admin.css">
+  <link rel="stylesheet" href="lib/leaflet.css">
+</head>
+<body class="admin-body">
+
+  <!-- ============================================================
+       TRANG QUẢN TRỊ (admin.html) — CHỈ ADMIN
+       - Sidebar trái: Dashboard, Sản phẩm, Danh mục, Topping, Đơn hàng,
+         Đánh giá, Khách hàng, Cài đặt + nút Đăng xuất.
+       - Nội dung chính (main): mỗi mục là 1 <section> có id view-...
+         được bật/tắt bằng admin.js (view()).
+       - BẢO VỆ: admin.js gate() — không phải admin bị chuyển về admin-login.html.
+       - Các section:
+           #view-dashboard  : KPI, biểu đồ 7 ngày, top bán chạy, đánh giá website,
+                              đơn hàng gần đây.
+           #view-products   : CRUD sản phẩm + form modal (upload ảnh base64).
+           #view-categories : CRUD danh mục sản phẩm + form modal.
+           #view-toppings   : CRUD topping.
+           #view-orders     : quản lý đơn hàng (đổi trạng thái, xem chi tiết).
+           #view-reviews    : quản lý đánh giá sản phẩm + website (xoá).
+           #view-users      : khoá/mở/xoá khách hàng.
+           #view-settings   : cài đặt website (lưu vĩnh viễn vào SQLite).
+       - Modal chi tiết đơn #order-modal ở cuối trang.
+       ============================================================ -->
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="admin-sidebar">
+    <div class="admin-brand"><span class="brand-text">ShanCha Store</span></div>
+    <div class="sidebar-col sidebar-nav-col">
+      <div class="sidebar-group-label">Quản lý</div>
+      <nav class="admin-nav" aria-label="Quản trị">
+        <button class="active" data-view="dashboard"><span class="nav-ic" data-ic="dash"></span><span>Dashboard</span></button>
+        <button data-view="products"><span class="nav-ic" data-ic="cup"></span><span>Sản phẩm</span></button>
+        <button data-view="categories"><span class="nav-ic" data-ic="tag"></span><span>Danh mục</span></button>
+        <button data-view="banners"><span class="nav-ic" data-ic="img"></span><span>Banner</span></button>
+        <button data-view="stores"><span class="nav-ic" data-ic="loc"></span><span>Chi nhánh</span></button>
+        <button data-view="customer-reviews"><span class="nav-ic" data-ic="star"></span><span>Nhận xét khách</span></button>
+        <button data-view="groups"><span class="nav-ic" data-ic="cup"></span><span>Nhóm SP</span></button>
+        <button data-view="promos"><span class="nav-ic" data-ic="truck"></span><span>Mã giảm giá</span></button>
+        <button data-view="newsletters"><span class="nav-ic" data-ic="mail"></span><span>Newsletter</span></button>
+        <button data-view="toppings"><span class="nav-ic" data-ic="topping"></span><span>Topping</span></button>
+        <button data-view="orders"><span class="nav-ic" data-ic="box"></span><span>Đơn hàng</span></button>
+        <button data-view="reviews"><span class="nav-ic" data-ic="comment"></span><span>Đánh giá</span></button>
+        <button data-view="users"><span class="nav-ic" data-ic="users"></span><span>Khách hàng</span></button>
+        <button data-view="settings"><span class="nav-ic" data-ic="gear"></span><span>Cài đặt</span></button>
+      </nav>
+    </div>
+    <div class="sidebar-sys-col">
+      <div class="sidebar-group-label" style="margin-top:2px">Hệ thống</div>
+      <nav class="admin-nav admin-nav-sys" aria-label="Hệ thống">
+        <a class="nav-sys-link" href="index.html"><span class="nav-ic" data-ic="chevL"></span><span>Về website</span></a>
+        <button id="admin-logout"><span class="nav-ic" data-ic="logout"></span><span>Đăng xuất</span></button>
+      </nav>
+    </div>
+  </aside>
+
+  <!-- ===== MAIN ===== -->
+  <main class="admin-main">
+    <div class="admin-top">
+      <h1 id="view-title">Dashboard</h1>
+      <div class="admin-user">
+        <span id="admin-user-name"></span>
+        <span class="badge-admin">ADMIN</span>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <section id="view-dashboard">
+      <div class="kpi-grid" id="kpi-grid"></div>
+      <div class="panel">
+        <div class="panel-head"><h2>Doanh thu 7 ngày gần nhất</h2></div>
+        <div id="revenue-chart"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Top sản phẩm bán chạy</h2></div>
+        <div class="table-wrap"><table class="table" id="top-products"></table></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Đánh giá website</h2><span class="badge-admin" id="site-review-count">0</span></div>
+        <div class="table-wrap"><table class="table" id="site-reviews-table"></table></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Đơn hàng gần đây</h2><button class="btn btn-ghost btn-sm" onclick="Admin.view('orders')">Xem tất cả</button></div>
+        <div class="table-wrap"><table class="table" id="recent-orders"></table></div>
+      </div>
+    </section>
+
+    <!-- Sản phẩm -->
+    <section id="view-products" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Quản lý sản phẩm</h2>
+          <button class="btn btn-primary btn-sm" id="btn-new-product">+ Thêm sản phẩm</button>
+        </div>
+        <div class="admin-toolbar">
+          <input type="search" id="adm-search" placeholder=" Tìm sản phẩm…">
+          <select id="adm-cat">
+            <option value="all">Tất cả danh mục</option>
+          </select>
+          <select id="adm-group">
+            <option value="all">Tất cả nhóm</option>
+            <option value="new">Sản phẩm mới</option>
+            <option value="hot">Sản phẩm hot</option>
+            <option value="sale">Khuyến mãi</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="adm-products-table"></table>
+        </div>
+      </div>
+      <!-- Form thêm/sửa sản phẩm (POPUP MODAL) -->
+      <div class="modal" id="product-form-modal">
+        <div class="modal-card">
+          <button class="modal-close" id="pf-modal-close" aria-label="Đóng">×</button>
+          <div class="modal-body" style="grid-template-columns:1fr">
+            <div class="modal-cat">Quản lý sản phẩm</div>
+            <h2 class="modal-name" id="pf-title" style="font-size:1.3rem">Thêm sản phẩm</h2>
+            <form class="crud-form" id="product-form">
+              <input type="hidden" id="pf-id">
+              <div class="form-group"><label>Tên sản phẩm *</label><input type="text" id="pf-name" required></div>
+              <div class="form-group"><label>Danh mục</label>
+                <select id="pf-cat"></select>
+              </div>
+              <div class="form-group"><label>Nhóm</label>
+                <select id="pf-group">
+                  <option value="new">Sản phẩm mới</option>
+                  <option value="hot">Sản phẩm hot</option>
+                  <option value="sale">Khuyến mãi</option>
+                </select>
+              </div>
+              <div class="form-group"><label>Giá (₫) *</label><input type="number" id="pf-price" min="0" required></div>
+              <div class="form-group"><label>Giá cũ (₫, để trống nếu không KM)</label><input type="number" id="pf-oldprice" min="0"></div>
+              <div class="form-group full"><label>Mô tả</label><textarea id="pf-desc"></textarea></div>
+              <div class="form-group full"><label>Ảnh sản phẩm (chọn file máy hoặc dán link)</label>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <input type="text" id="pf-img" placeholder="https://... hoặc tên file trong assets/images">
+                  <input type="file" id="pf-img-file" accept="image/*" style="max-width:210px">
+                </div>
+                <p style="font-size:.78rem;color:var(--muted);margin-top:4px">Chọn ảnh từ máy (tự lưu vào website) hoặc dán link ảnh. Để trống sẽ dùng ảnh mặc định của danh mục.</p>
+                <div id="pf-img-preview" style="margin-top:8px"></div>
+              </div>
+              <div class="form-group"><label>Đánh giá (0–5)</label><input type="number" id="pf-rating" min="0" max="5" step="0.1"></div>
+              <div class="form-group"><label>Đã bán</label><input type="number" id="pf-sold" min="0"></div>
+              <div class="crud-actions full">
+                <button class="btn btn-primary" type="submit"><span class="ic-inline" data-ic="save"></span> Lưu sản phẩm</button>
+                <button class="btn btn-ghost" type="button" id="pf-cancel">Huỷ</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Danh mục -->
+    <section id="view-categories" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Quản lý danh mục</h2>
+          <button class="btn btn-primary btn-sm" id="btn-new-category">+ Thêm danh mục</button>
+        </div>
+        <div class="admin-toolbar">
+          <input type="search" id="cat-search" placeholder=" Tìm danh mục…">
+        </div>
+        <div class="table-wrap"><table class="table" id="adm-cats-table"></table></div>
+      </div>
+      <!-- Form thêm/sửa danh mục (POPUP) -->
+      <div class="modal" id="cat-form-modal">
+        <div class="modal-card small">
+          <button class="modal-close" id="cf-modal-close" aria-label="Đóng">×</button>
+          <div class="modal-body" style="grid-template-columns:1fr">
+            <div class="modal-cat">Quản lý danh mục</div>
+            <h2 class="modal-name" id="cf-title" style="font-size:1.3rem">Thêm danh mục</h2>
+            <form class="crud-form" id="cat-form">
+              <input type="hidden" id="cf-id">
+              <div class="form-group full"><label>ID danh mục (chữ thường, số, gạch ngang) *</label><input type="text" id="cf-id-input" placeholder="VD: tra-xanh" required></div>
+              <div class="form-group full"><label>Tên danh mục *</label><input type="text" id="cf-name" placeholder="VD: Trà xanh" required></div>
+              <div class="crud-actions full">
+                <button class="btn btn-primary" type="submit"><span class="ic-inline" data-ic="save"></span> Lưu danh mục</button>
+                <button class="btn btn-ghost" type="button" id="cf-cancel">Huỷ</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Banner -->
+    <section id="view-banners" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Quản lý Banner</h2>
+          <button class="btn btn-primary btn-sm" id="btn-new-banner">+ Thêm banner</button>
+        </div>
+        <div class="table-wrap"><table class="table" id="adm-banners-table"></table></div>
+      </div>
+      <div class="modal" id="banner-form-modal">
+        <div class="modal-card small">
+          <button class="modal-close" id="bn-modal-close" aria-label="Đóng">×</button>
+          <div class="modal-body" style="grid-template-columns:1fr">
+            <div class="modal-cat">Quản lý Banner</div>
+            <h2 class="modal-name" id="bn-title" style="font-size:1.3rem">Thêm banner</h2>
+            <form class="crud-form" id="banner-form">
+              <input type="hidden" id="bn-id">
+              <div class="form-group full"><label>Ảnh (link hoặc file) *</label>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <input type="text" id="bn-img" placeholder="assets/images/banner-1.jpg">
+                  <input type="file" id="bn-img-file" accept="image/*" style="max-width:200px">
+                </div>
+                <div class="img-hint">Tỷ lệ khuyến nghị <b>2.4 : 1</b> · Kích thước chuẩn <b>1920 × 800 px</b> · Ảnh <b>≥ 960px ngang</b> để không bị mờ. Ảnh tải lên sẽ được tự cắt giữa và chuẩn hoá về 1920×800.</div>
+                <div id="bn-img-preview" style="margin-top:8px"></div>
+              </div>
+              <div class="form-group full"><label>Tiêu đề</label><input type="text" id="bn-title-input" placeholder="SƠN TRÀ"></div>
+              <div class="form-group full"><label>Phụ đề</label><input type="text" id="bn-sub" placeholder="Trà trên núi – hương vị từ Đà Lạt"></div>
+              <div class="form-group full"><label>Link nút</label><input type="text" id="bn-link" placeholder="products.html"></div>
+              <div class="form-group"><label>Thứ tự</label><input type="number" id="bn-sort" min="0" value="1"></div>
+              <div class="form-group"><label class="inline-check"><input type="checkbox" id="bn-active" checked> Hiển thị</label></div>
+              <div class="crud-actions full">
+                <button class="btn btn-primary" type="submit"><span class="ic-inline" data-ic="save"></span> Lưu banner</button>
+                <button class="btn btn-ghost" type="button" id="bn-cancel">Huỷ</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Chi nhánh -->
+    <section id="view-stores" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Quản lý chi nhánh</h2>
+          <button class="btn btn-primary btn-sm" id="btn-new-store">+ Thêm chi nhánh</button>
+        </div>
+        <div class="admin-toolbar"><input type="search" id="store-search" placeholder=" Tìm chi nhánh…"></div>
+        <div class="table-wrap"><table class="table" id="adm-stores-table"></table></div>
+      </div>
+      <div class="modal" id="store-form-modal">
+        <div class="modal-card small">
+          <button class="modal-close" id="st-modal-close" aria-label="Đóng">×</button>
+          <div class="modal-body" style="grid-template-columns:1fr">
+            <div class="modal-cat">Quản lý chi nhánh</div>
+            <h2 class="modal-name" id="st-title" style="font-size:1.3rem">Thêm chi nhánh</h2>
+            <form class="crud-form" id="store-form">
+              <input type="hidden" id="st-id">
+              <div class="form-group full"><label>ID (chữ thường, gạch ngang) *</label><input type="text" id="st-id-input" placeholder="cn5" required></div>
+              <div class="form-group full"><label>Tên chi nhánh *</label><input type="text" id="st-name-input" required></div>
+              <div class="form-group full"><label>Địa chỉ</label><input type="text" id="st-address-input"></div>
+              <div class="form-group"><label>Giờ mở cửa</label><input type="text" id="st-hours-input" placeholder="09:00 – 22:00"></div>
+              <div class="form-group"><label>SĐT</label><input type="text" id="st-phone-input"></div>
+              <div class="form-group full"><label>Vị trí trên bản đồ (bấm hoặc kéo chấm đỏ để chọn)</label>
+                <div id="store-map" style="height:280px;border-radius:12px;border:1px solid var(--line);z-index:0"></div>
+                <input type="hidden" id="st-lat" step="any">
+                <input type="hidden" id="st-lng" step="any">
+                <div id="store-map-coord" style="font-size:.78rem;color:var(--muted);margin-top:6px"></div>
+              </div>
+              <div class="crud-actions full">
+                <button class="btn btn-primary" type="submit"><span class="ic-inline" data-ic="save"></span> Lưu chi nhánh</button>
+                <button class="btn btn-ghost" type="button" id="st-cancel">Huỷ</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Nhận xét khách hàng -->
+    <section id="view-customer-reviews" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Nhận xét khách hàng</h2>
+          <button class="btn btn-primary btn-sm" id="btn-new-creview">+ Thêm nhận xét</button>
+        </div>
+        <div class="table-wrap"><table class="table" id="adm-creviews-table"></table></div>
+      </div>
+      <div class="modal" id="creview-form-modal">
+        <div class="modal-card small">
+          <button class="modal-close" id="cr-modal-close" aria-label="Đóng">×</button>
+          <div class="modal-body" style="grid-template-columns:1fr">
+            <div class="modal-cat">Nhận xét khách hàng</div>
+            <h2 class="modal-name" id="cr-title" style="font-size:1.3rem">Thêm nhận xét</h2>
+            <form class="crud-form" id="creview-form">
+              <input type="hidden" id="cr-id">
+              <div class="form-group"><label>Chữ avatar</label><input type="text" id="cr-avatar" maxlength="2" placeholder="L"></div>
+              <div class="form-group"><label>Số sao (1–5)</label><input type="number" id="cr-stars" min="1" max="5" value="5"></div>
+              <div class="form-group full"><label>Nội dung *</label><textarea id="cr-content" rows="3" required></textarea></div>
+              <div class="form-group"><label>Tên *</label><input type="text" id="cr-author" required></div>
+              <div class="form-group"><label>Thành phố</label><input type="text" id="cr-city"></div>
+              <div class="crud-actions full">
+                <button class="btn btn-primary" type="submit"><span class="ic-inline" data-ic="save"></span> Lưu nhận xét</button>
+                <button class="btn btn-ghost" type="button" id="cr-cancel">Huỷ</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Nhóm sản phẩm -->
+    <section id="view-groups" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Quản lý nhóm sản phẩm</h2>
+          <button class="btn btn-primary btn-sm" id="btn-new-group">+ Thêm nhóm</button>
+        </div>
+        <div class="table-wrap"><table class="table" id="adm-groups-table"></table></div>
+      </div>
+      <div class="modal" id="group-form-modal">
+        <div class="modal-card small">
+          <button class="modal-close" id="gr-modal-close" aria-label="Đóng">×</button>
+          <div class="modal-body" style="grid-template-columns:1fr">
+            <div class="modal-cat">Quản lý nhóm sản phẩm</div>
+            <h2 class="modal-name" id="gr-title" style="font-size:1.3rem">Thêm nhóm</h2>
+            <form class="crud-form" id="group-form">
+              <input type="hidden" id="gr-id">
+              <div class="form-group full"><label>ID nhóm (chữ thường, gạch ngang) *</label><input type="text" id="gr-id-input" placeholder="VD: new" required></div>
+              <div class="form-group full"><label>Tên nhóm *</label><input type="text" id="gr-name" placeholder="VD: Sản phẩm mới" required></div>
+              <div class="crud-actions full">
+                <button class="btn btn-primary" type="submit"><span class="ic-inline" data-ic="save"></span> Lưu nhóm</button>
+                <button class="btn btn-ghost" type="button" id="gr-cancel">Huỷ</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Mã giảm giá -->
+    <section id="view-promos" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Mã giảm giá</h2>
+          <button class="btn btn-primary btn-sm" id="btn-new-promo">+ Thêm mã</button>
+        </div>
+        <div class="table-wrap"><table class="table" id="adm-promos-table"></table></div>
+      </div>
+      <div class="modal" id="promo-form-modal">
+        <div class="modal-card small">
+          <button class="modal-close" id="pr-modal-close" aria-label="Đóng">×</button>
+          <div class="modal-body" style="grid-template-columns:1fr">
+            <div class="modal-cat">Mã giảm giá</div>
+            <h2 class="modal-name" id="pr-title" style="font-size:1.3rem">Thêm mã</h2>
+            <form class="crud-form" id="promo-form">
+              <input type="hidden" id="pr-code">
+              <div class="form-group full"><label>Mã *</label><input type="text" id="pr-code-input" placeholder="SHANCHA15" required></div>
+              <div class="form-group full"><label>Nhãn *</label><input type="text" id="pr-label" placeholder="Giảm 15% đơn hàng" required></div>
+              <div class="form-group"><label>Loại</label>
+                <select id="pr-type">
+                  <option value="percent">% giảm giá</option>
+                  <option value="amount">Số tiền giảm</option>
+                  <option value="ship">Miễn phí ship</option>
+                </select>
+              </div>
+              <div class="form-group"><label>Giá trị (số % hoặc tiền)</label><input type="number" id="pr-value" min="0" value="0"></div>
+              <div class="form-group"><label>Giảm tối đa (percent)</label><input type="number" id="pr-max" min="0"></div>
+              <div class="form-group"><label>Đơn tối thiểu</label><input type="number" id="pr-min" min="0"></div>
+              <div class="form-group full"><label><input type="checkbox" id="pr-active" checked> Đang hoạt động</label></div>
+              <div class="crud-actions full">
+                <button class="btn btn-primary" type="submit"><span class="ic-inline" data-ic="save"></span> Lưu mã</button>
+                <button class="btn btn-ghost" type="button" id="pr-cancel">Huỷ</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Newsletter -->
+    <section id="view-newsletters" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Danh sách email đăng ký nhận ưu đãi</h2>
+          <span class="badge-admin" id="nl-count">0</span>
+        </div>
+        <div class="admin-toolbar"><input type="search" id="nl-search" placeholder=" Tìm email…"></div>
+        <div class="table-wrap"><table class="table" id="adm-newsletters-table"></table></div>
+      </div>
+    </section>
+
+    <!-- Topping -->
+    <section id="view-toppings" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Quản lý Topping</h2>
+          <button class="btn btn-primary btn-sm" id="btn-new-topping">+ Thêm topping</button>
+        </div>
+        <div class="admin-toolbar">
+          <input type="search" id="tp-search" placeholder="Tìm topping…">
+        </div>
+        <div class="table-wrap"><table class="table" id="adm-toppings-table"></table></div>
+      </div>
+      <!-- Form thêm/sửa topping (POPUP) -->
+      <div class="modal" id="topping-form-modal">
+        <div class="modal-card small">
+          <button class="modal-close" id="tp-modal-close" aria-label="Đóng">×</button>
+          <div class="modal-body" style="grid-template-columns:1fr">
+            <div class="modal-cat">Quản lý Topping</div>
+            <h2 class="modal-name" id="tp-title" style="font-size:1.3rem">Thêm topping</h2>
+            <form class="crud-form" id="topping-form">
+              <input type="hidden" id="tp-id">
+              <div class="form-group full"><label>Tên topping *</label><input type="text" id="tp-name" required></div>
+              <div class="form-group full"><label>Giá (₫) *</label><input type="number" id="tp-price" min="0" required></div>
+              <div class="crud-actions full">
+                <button class="btn btn-primary" type="submit"><span class="ic-inline" data-ic="save"></span> Lưu topping</button>
+                <button class="btn btn-ghost" type="button" id="tp-cancel">Huỷ</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Đơn hàng -->
+    <section id="view-orders" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Quản lý đơn hàng</h2>
+          <select id="adm-status" class="filter-select">
+            <option value="all">Tất cả trạng thái</option>
+            <option value="processing">Chờ xử lý</option>
+            <option value="delivering">Đang giao</option>
+            <option value="done">Hoàn thành</option>
+            <option value="cancelled">Đã huỷ</option>
+          </select>
+        </div>
+        <div class="table-wrap"><table class="table" id="adm-orders-table"></table></div>
+      </div>
+    </section>
+
+    <!-- Đánh giá / bình luận -->
+    <section id="view-reviews" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Đánh giá sản phẩm</h2>
+          <span class="badge-admin" id="rv-count-badge">0</span>
+        </div>
+        <div class="admin-toolbar">
+          <input type="search" id="rv-search" placeholder=" Tìm người gửi / nội dung…">
+          <select id="rv-filter" class="filter-select">
+            <option value="all">Tất cả sao</option>
+            <option value="5">5 sao</option>
+            <option value="4">4 sao</option>
+            <option value="3">3 sao</option>
+            <option value="2">2 sao</option>
+            <option value="1">1 sao</option>
+          </select>
+        </div>
+        <div class="table-wrap"><table class="table" id="adm-reviews-table"></table></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Đánh giá website</h2>
+          <span class="badge-admin" id="sr-count-badge">0</span>
+        </div>
+        <div class="admin-toolbar">
+          <input type="search" id="sr-search" placeholder=" Tìm người gửi / nội dung…">
+        </div>
+        <div class="table-wrap"><table class="table" id="adm-site-reviews-table"></table></div>
+      </div>
+    </section>
+
+    <!-- Khách hàng -->
+    <section id="view-users" style="display:none">
+      <div class="panel">
+        <div class="panel-head"><h2>Quản lý khách hàng</h2></div>
+        <div class="table-wrap"><table class="table" id="adm-users-table"></table></div>
+      </div>
+    </section>
+
+    <!-- Cài đặt -->
+    <section id="view-settings" style="display:none">
+      <div class="panel" style="max-width:620px;margin:0 auto">
+        <div class="panel-head"><h2>Cài đặt website</h2></div>
+        <form class="crud-form" id="settings-form">
+          <div class="form-group"><label>Tên website</label><input type="text" id="st-name"></div>
+          <div class="form-group"><label>Slogan</label><input type="text" id="st-slogan"></div>
+          <div class="form-group full"><label>Mô tả website</label><textarea id="st-desc" rows="2"></textarea></div>
+          <div class="form-group"><label>Hotline</label><input type="text" id="st-hotline"></div>
+          <div class="form-group"><label>Email</label><input type="email" id="st-email"></div>
+          <div class="form-group full"><label>Địa chỉ</label><input type="text" id="st-address"></div>
+          <div class="form-group"><label>Giờ mở cửa</label><input type="text" id="st-hours-open" placeholder="09:00 – 22:00"></div>
+          <div class="form-group"><label>Màu chủ đạo</label><input type="color" id="st-theme" value="#C97B4A"></div>
+          <div class="form-group full"><label>Logo (link hoặc chọn file)</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <input type="text" id="st-logo" placeholder="assets/images/logo.svg hoặc https://...">
+              <input type="file" id="st-logo-file" accept="image/*" style="max-width:200px">
+            </div>
+            <div id="st-logo-preview" style="margin-top:8px"></div>
+          </div>
+          <div class="form-group"><label>% Flash sale</label><input type="number" id="st-sale" min="0" max="90"></div>
+          <div class="form-group"><label>Thời gian flash sale còn (giờ)</label><input type="number" id="st-hours" min="1" max="720"></div>
+          <div class="form-group full"><label>Câu chuyện — đoạn 1</label><textarea id="st-story-1" rows="2"></textarea></div>
+          <div class="form-group full"><label>Câu chuyện — đoạn 2</label><textarea id="st-story-2" rows="2"></textarea></div>
+          <div class="form-group"><label>Thống kê 1 — số</label><input type="text" id="st-stat1-num" placeholder="18+"></div>
+          <div class="form-group"><label>Thống kê 1 — chú thích</label><input type="text" id="st-stat1-label" placeholder="Món signature"></div>
+          <div class="form-group"><label>Thống kê 2 — số</label><input type="text" id="st-stat2-num" placeholder="4.8★"></div>
+          <div class="form-group"><label>Thống kê 2 — chú thích</label><input type="text" id="st-stat2-label" placeholder="Đánh giá trung bình"></div>
+          <div class="form-group"><label>Thống kê 3 — số</label><input type="text" id="st-stat3-num" placeholder="4 CN"></div>
+          <div class="form-group"><label>Thống kê 3 — chú thích</label><input type="text" id="st-stat3-label" placeholder="TP.HCM & Đà Lạt"></div>
+          <div class="form-group full"><label>Ảnh story 1</label><input type="text" id="st-story-img-1" placeholder="assets/images/story-1.svg"></div>
+          <div class="form-group full"><label>Ảnh story 2</label><input type="text" id="st-story-img-2" placeholder="assets/images/story-2.svg"></div>
+          <div class="form-group full"><label>Ảnh story 3</label><input type="text" id="st-story-img-3" placeholder="assets/images/story-3.svg"></div>
+          <div class="crud-actions full"><button class="btn btn-primary" type="submit">Lưu cài đặt</button></div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal chi tiết đơn -->
+  <div class="modal" id="order-modal">
+    <div class="modal-card small">
+      <button class="modal-close" id="order-modal-close" aria-label="Đóng">×</button>
+      <div style="padding:26px" id="order-modal-body"></div>
+    </div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="lib/leaflet.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

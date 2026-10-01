@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="800" viewBox="0 0 1920 800" role="img" aria-label="Banner Sơn Trà">
+  <defs>
+    <linearGradient id="bg1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E8D5B8"/>
+      <stop offset="0.55" stop-color="#C89B6D"/>
+      <stop offset="1" stop-color="#7A4E2D"/>
+    </linearGradient>
+    <linearGradient id="leaf" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6E8B3D"/>
+      <stop offset="1" stop-color="#3C5526"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#FFF6E0" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#FFF6E0" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1920" height="800" fill="url(#bg1)"/>
+  <circle cx="1560" cy="160" r="420" fill="url(#sun)"/>
+  <!-- đồi trà -->
+  <path d="M0 620 Q 300 480 620 600 Q 950 460 1320 610 Q 1620 480 1920 600 L1920 800 L0 800 Z" fill="rgba(60,85,38,0.35)"/>
+  <path d="M0 700 Q 400 560 860 680 Q 1400 540 1920 690 L1920 800 L0 800 Z" fill="rgba(60,85,38,0.45)"/>
+  <!-- lá trà bay -->
+  <g fill="url(#leaf)" opacity="0.85">
+    <path d="M420 210 q 34 -26 68 0 q -18 30 -68 16 q -50 14 -68 -16 q 34 -26 68 0 Z" transform="rotate(-18 420 210)"/>
+    <path d="M520 150 q 28 -22 56 0 q -15 25 -56 13 q -41 12 -56 -13 q 28 -22 56 0 Z" transform="rotate(12 520 150)"/>
+    <path d="M330 300 q 24 -18 48 0 q -13 22 -48 11 q -35 10 -48 -11 q 24 -18 48 0 Z" transform="rotate(24 330 300)"/>
+  </g>
+  <!-- cốc trà minh hoạ bên phải -->
+  <g transform="translate(1290,330)">
+    <ellipse cx="0" cy="0" rx="130" ry="38" fill="#FFFFFF" opacity="0.96"/>
+    <path d="M-110 10 L-92 250 Q -40 300 0 300 Q 40 300 92 250 L110 10 Z" fill="#FFFFFF" opacity="0.92"/>
+    <ellipse cx="0" cy="10" rx="110" ry="30" fill="#6E4527"/>
+    <ellipse cx="0" cy="10" rx="88" ry="22" fill="#8B5A33"/>
+    <path d="M-30 10 q 10 -24 22 -8 q 14 4 4 14 q -10 8 -26 -6 Z" fill="#C89B6D" opacity="0.9"/>
+    <path d="M-8 12 q 12 -20 24 -4 q 12 6 4 16 q -12 8 -28 -12 Z" fill="#A97A4A" opacity="0.9"/>
+    <path d="M108 20 Q 178 8 176 84 Q 174 150 110 128" fill="none" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round" opacity="0.95"/>
+    <path d="M-130 300 h 260" stroke="rgba(255,255,255,0.7)" stroke-width="6" stroke-linecap="round"/>
+    <path d="M-60 260 l 0 26 M 0 268 l 0 26 M 60 260 l 0 26" stroke="rgba(255,255,255,0.55)" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <!-- viền mờ trang trí -->
+  <rect x="90" y="80" width="470" height="10" rx="5" fill="rgba(255,255,255,0.85)"/>
+</svg>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Menu – ShanCha Store</title>
+  <meta name="description" content="Toàn bộ menu ShanCha: trà sữa, trà lạnh, cà phê. Tìm kiếm, lọc và sắp xếp sản phẩm.">
+  <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <header class="site-header" id="site-header"></header>
+
+  <!-- ============================================================
+       TRANG MENU (products.html)
+       - Thanh lọc: ô tìm kiếm + select danh mục (render động từ SQLite)
+                    + select sắp xếp (giá / đánh giá / bán chạy).
+       - Lưới sản phẩm #product-grid: products.js vẽ card sản phẩm.
+       - Không tìm thấy -> ô "Không tìm thấy món nào phù hợp".
+       ============================================================ -->
+  <main>
+    <section class="page-hero">
+      <h1>Menu ShanCha</h1>
+      <p>Tìm kiếm, lọc và sắp xếp theo sở thích của bạn</p>
+    </section>
+
+    <section class="section">
+      <div class="container">
+        <div class="filter-bar">
+          <div class="search-box">
+            <input type="search" id="search-input" placeholder=" Tìm món… (vd: trà sữa, cà phê)" aria-label="Tìm kiếm sản phẩm">
+          </div>
+          <select class="filter-select" id="cat-filter" aria-label="Lọc danh mục">
+            <option value="all">Tất cả danh mục</option>
+            <option value="tra-sua">Trà sữa</option>
+            <option value="tra-lanh">Trà lạnh</option>
+            <option value="ca-phe">Cà phê</option>
+          </select>
+          <select class="filter-select" id="sort-select" aria-label="Sắp xếp">
+            <option value="default">Sắp xếp mặc định</option>
+            <option value="price-asc">Giá tăng dần</option>
+            <option value="price-desc">Giá giảm dần</option>
+            <option value="rating">Đánh giá cao nhất</option>
+            <option value="sold">Bán chạy nhất</option>
+          </select>
+        </div>
+        <p id="result-count" class="section-desc" style="text-align:left;margin-bottom:16px"></p>
+        <div class="product-grid" id="product-grid"></div>
+        <div id="empty-box" style="display:none;text-align:center;padding:40px 0;color:var(--muted)">
+          <p style="font-size:2.6rem"></p>
+          <p>Không tìm thấy món nào phù hợp.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer" id="site-footer"></footer>
+
+  <script src="js/data.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="js/products.js"></script>
+</body>
+</html>

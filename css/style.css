@@ -148,6 +148,10 @@ textarea {
 .brand-img {
   height: 40px;
 }
+/* Nút burger ẩn mặc định — hiện trên mobile qua media query (max-width:900px) */
+.nav-burger {
+  display: none;
+}
 .brand-text {
   font-weight: 900;
   letter-spacing: 0.01em;
@@ -1315,7 +1319,62 @@ textarea {
   .nav-user-name {
     display: none;
   }
+  /* ---------- Menu mobile: nút hamburger + menu trượt ---------- */
+  .nav-burger {
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    width: 42px;
+    height: 42px;
+    padding: 0 9px;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .nav-burger span {
+    display: block;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--ink);
+    transition: transform 0.25s ease, opacity 0.2s ease;
+  }
+  .nav-burger.open span:nth-child(1) {
+    transform: translateY(7px) rotate(45deg);
+  }
+  .nav-burger.open span:nth-child(2) {
+    opacity: 0;
+  }
+  .nav-burger.open span:nth-child(3) {
+    transform: translateY(-7px) rotate(-45deg);
+  }
+  .mobile-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 16px 14px;
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+  }
+  .mobile-nav[hidden] {
+    display: none;
+  }
+  .mobile-nav .nav-link {
+    padding: 12px 8px;
+    font-size: 1rem;
+    border-radius: 10px;
+  }
+  .mobile-nav .nav-link.active {
+    background: var(--bg-soft);
+    color: var(--accent);
+  }
+  .mobile-nav-open {
+    overflow: hidden;
+  }
 }
+/* Nút burger luôn ẩn trên desktop (chỉ hiện dưới 900px qua media query) */
 @media (max-width: 560px) {
   .footer-grid {
     grid-template-columns: 1fr;

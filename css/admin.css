@@ -405,6 +405,60 @@
   .admin-sidebar .sidebar-sys-col {
     padding: 6px 8px 10px;
   }
+  /* Bảng rộng -> cuộn ngang mượt trên điện thoại */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .table {
+    min-width: 640px;
+  }
+}
+
+/* Điện thoại rất nhỏ: sidebar thành thanh dưới (bottom nav) */
+@media (max-width: 560px) {
+  .admin-sidebar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: auto;
+    width: 100%;
+    height: auto;
+    z-index: 40;
+    flex-direction: row;
+    padding: 4px 6px;
+    border-right: none;
+    border-top: 1px solid var(--line);
+  }
+  .admin-sidebar .sidebar-col {
+    flex-direction: row;
+    width: 100%;
+  }
+  .admin-sidebar .sidebar-nav-col {
+    display: flex;
+    overflow-x: auto;
+    gap: 2px;
+  }
+  .admin-sidebar .admin-nav {
+    display: flex;
+    flex-direction: row;
+    gap: 2px;
+  }
+  .admin-sidebar .admin-nav button {
+    flex: 0 0 auto;
+    padding: 8px 10px;
+  }
+  .admin-sidebar .admin-brand,
+  .admin-sidebar .sidebar-sys-col {
+    display: none;
+  }
+  .admin-main {
+    padding: 16px 12px 72px;
+  }
+  .admin-top h1 {
+    font-size: 1.2rem;
+  }
 }
 
 /* Tag km + mã giảm giá trên bảng đơn hàng */

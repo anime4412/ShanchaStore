@@ -241,6 +241,9 @@ const UI = (function () {
       '<a class="nav-link" href="index.html#story">Câu chuyện</a>' +
       '<a class="nav-link" href="index.html#stores">Chi nhánh</a>' +
       "</nav>" +
+      '<button class="nav-burger" id="nav-burger" aria-label="Mở menu" aria-expanded="false">' +
+      '<span></span><span></span><span></span>' +
+      "</button>" +
       '<div class="header-actions">' +
       authHtml +
       '<button class="cart-btn" id="btn-cart" aria-label="Giỏ hàng">' +
@@ -251,6 +254,26 @@ const UI = (function () {
       "</span>" +
       "</button>" +
       "</div>" +
+      "</div>" +
+      '<div class="mobile-nav" id="mobile-nav" hidden>' +
+      '<a class="nav-link' +
+      (active === "home" ? " active" : "") +
+      '" href="index.html">Trang chủ</a>' +
+      '<a class="nav-link' +
+      (active === "products" ? " active" : "") +
+      '" href="products.html">Menu</a>' +
+      '<a class="nav-link' +
+      (active === "about" ? " active" : "") +
+      '" href="about.html">Giới thiệu</a>' +
+      '<a class="nav-link" href="index.html#story">Câu chuyện</a>' +
+      '<a class="nav-link" href="index.html#stores">Chi nhánh</a>' +
+      (user && user.role === "admin"
+        ? '<a class="nav-link" href="admin.html">Quản trị</a>'
+        : "") +
+      (user
+        ? '<a class="nav-link" href="profile.html">Tài khoản</a>' +
+          '<a class="nav-link" href="#" id="mobile-logout">Đăng xuất</a>'
+        : '<a class="nav-link" href="login.html">Đăng nhập / Đăng ký</a>') +
       "</div>";
 
     const logoutBtn = document.getElementById("btn-logout");
@@ -262,6 +285,45 @@ const UI = (function () {
         UI.renderHeader(active);
         setTimeout(() => location.reload(), 300);
       });
+    /* ---------- Menu mobile: hamburger toggle ---------- */
+    const burger = document.getElementById("nav-burger");
+    const mobileNav = document.getElementById("mobile-nav");
+    if (burger && mobileNav) {
+      const closeMobile = () => {
+        mobileNav.hidden = true;
+        burger.classList.remove("open");
+        burger.setAttribute("aria-expanded", "false");
+        document.body.classList.remove("mobile-nav-open");
+      };
+      burger.addEventListener("click", () => {
+        const opening = mobileNav.hidden;
+        mobileNav.hidden = !opening;
+        burger.classList.toggle("open", opening);
+        burger.setAttribute("aria-expanded", opening ? "true" : "false");
+        document.body.classList.toggle("mobile-nav-open", opening);
+      });
+      mobileNav.querySelectorAll("a").forEach((a) => a.addEventListener("click", closeMobile));
+      const mLog = document.getElementById("mobile-logout");
+      if (mLog)
+        mLog.addEventListener("click", (e) => {
+          e.preventDefault();
+          closeMobile();
+          if (typeof Auth !== "undefined" && Auth.logout) {
+            Auth.logout();
+            UI.toast("Đã đăng xuất.", "info");
+          }
+          setTimeout(() => location.reload(), 300);
+        });
+      document.addEventListener("click", (e) => {
+        if (
+          !mobileNav.hidden &&
+          !e.target.closest("#mobile-nav") &&
+          !e.target.closest("#nav-burger")
+        ) {
+          closeMobile();
+        }
+      });
+    }
     const cartBtn = document.getElementById("btn-cart");
     if (cartBtn) cartBtn.addEventListener("click", openDrawer);
   }

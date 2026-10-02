@@ -33,14 +33,30 @@ const Admin = (function () {
 
   let currentView = 'dashboard';
 
-  /* ---------- Bảo vệ: chỉ admin mới vào được ---------- */
+  /* ---------- Bảo vệ: chỉ admin mới vào được (staff cũng vào được — PHASE 4) ---------- */
   function gate() {
-    if (!Store.isAdmin()) {
+    if (!Store.isLoggedIn()) {
+      location.href = 'admin-login.html';
+      return false;
+    }
+    if (!Store.isAdmin() && !Store.isStaff()) {
       location.href = 'admin-login.html';
       return false;
     }
     const user = Store.currentUser();
     document.getElementById('admin-user-name').textContent = user.name;
+    document.getElementById('admin-user-name').textContent += (user.role === 'admin' ? ' (ADMIN)' : ' (STAFF)');
+    /* staff chỉ thấy: Dashboard, Sản phẩm (chỉ bật/tắt hết hàng), Đơn hàng */
+    if (user.role !== 'admin') {
+      ['categories', 'banners', 'stores', 'customer-reviews', 'groups', 'promos', 'newsletters', 'toppings', 'reviews', 'users', 'settings', 'audit'].forEach(v => {
+        const btn = document.querySelector('.admin-nav button[data-view="' + v + '"]');
+        if (btn) btn.style.display = 'none';
+      });
+      ['dashboard', 'products', 'orders'].forEach(v => {
+        const btn = document.querySelector('.admin-nav button[data-view="' + v + '"]');
+        if (btn) btn.style.display = '';
+      });
+    }
     return true;
   }
 
@@ -48,7 +64,7 @@ const Admin = (function () {
   function view(name) {
     currentView = name;
     document.querySelectorAll('.admin-nav button').forEach(b => b.classList.toggle('active', b.dataset.view === name));
-    ['dashboard', 'products', 'categories', 'banners', 'stores', 'customer-reviews', 'groups', 'promos', 'newsletters', 'toppings', 'orders', 'reviews', 'users', 'settings'].forEach(v => {
+    ['dashboard', 'products', 'categories', 'banners', 'stores', 'customer-reviews', 'groups', 'promos', 'newsletters', 'toppings', 'orders', 'reviews', 'users', 'settings', 'audit'].forEach(v => {
       document.getElementById('view-' + v).style.display = v === name ? 'block' : 'none';
     });
     const titles = {
@@ -56,7 +72,7 @@ const Admin = (function () {
       banners: 'Quản lý Banner', stores: 'Quản lý chi nhánh', 'customer-reviews': 'Nhận xét khách hàng',
       groups: 'Nhóm sản phẩm', promos: 'Mã giảm giá', newsletters: 'Newsletter',
       toppings: 'Quản lý Topping', orders: 'Quản lý đơn hàng', reviews: 'Quản lý đánh giá',
-      users: 'Quản lý khách hàng', settings: 'Cài đặt website'
+      users: 'Quản lý khách hàng', settings: 'Cài đặt website', audit: 'Nhật ký hệ thống'
     };
     document.getElementById('view-title').textContent = titles[name];
     if (name === 'dashboard') renderDashboard();
@@ -73,6 +89,7 @@ const Admin = (function () {
     if (name === 'reviews') renderReviews();
     if (name === 'users') renderUsers();
     if (name === 'settings') renderSettings();
+    if (name === 'audit') renderAudit();
   }
 
   // inject icon SVG đơn sắc cho sidebar (data-ic)
@@ -88,14 +105,24 @@ const Admin = (function () {
     Auth.logout();
     location.href = 'index.html';
   });
-  /* ---------- Trạng thái đơn ---------- */
+  /* ---------- Trạng thái đơn (state machine 7 bước — PHASE 5) ---------- */
   const STATUS = {
-    processing: { label: 'Chờ xử lý', cls: 'badge-processing' },
-    delivering: { label: 'Đang giao', cls: 'badge-delivering' },
-    done: { label: 'Hoàn thành', cls: 'badge-done' },
-    cancelled: { label: 'Đã huỷ', cls: 'badge-cancelled' }
+    pending: { label: 'Chờ xác nhận', cls: 'badge-processing', next: ['confirmed', 'cancelled'] },
+    confirmed: { label: 'Đã xác nhận', cls: 'badge-processing', next: ['preparing', 'cancelled'] },
+    preparing: { label: 'Đang pha chế', cls: 'badge-delivering', next: ['ready', 'cancelled'] },
+    ready: { label: 'Sẵn sàng', cls: 'badge-delivering', next: ['delivering'] },
+    delivering: { label: 'Đang giao', cls: 'badge-delivering', next: ['completed'] },
+    completed: { label: 'Hoàn thành', cls: 'badge-done', next: [] },
+    cancelled: { label: 'Đã huỷ', cls: 'badge-cancelled', next: [] }
   };
-  function statusBadge(s) { const st = STATUS[s] || STATUS.processing; return '<span class="badge-status ' + st.cls + '">' + st.label + '</span>'; }
+  const PAYMENT_STATUS = {
+    pending: { label: 'Chờ thanh toán', cls: 'badge-processing' },
+    paid: { label: 'Đã thanh toán', cls: 'badge-done' },
+    failed: { label: 'Thanh toán lỗi', cls: 'badge-cancelled' },
+    refunded: { label: 'Đã hoàn tiền', cls: 'badge-cancelled' }
+  };
+  function statusBadge(s) { const st = STATUS[s] || STATUS.pending; return '<span class="badge-status ' + st.cls + '">' + st.label + '</span>'; }
+  function payBadge(s) { const st = PAYMENT_STATUS[s] || PAYMENT_STATUS.pending; return '<span class="badge-status ' + st.cls + '">' + st.label + '</span>'; }
 
   /* ================= DASHBOARD =================
      Tính toán các chỉ số từ Store.getOrders()/getProducts()/getUsers()
@@ -215,6 +242,7 @@ const Admin = (function () {
       '<option value="' + UI.esc(c.id) + '"' + (c.id === selected ? ' selected' : '') + '>' + UI.esc(c.name) + '</option>'
     ).join('');
   }
+  let admProdPage = 1;
   function renderProducts() {
     const q = (document.getElementById('adm-search').value || '').toLowerCase();
     const cat = document.getElementById('adm-cat').value;
@@ -230,32 +258,56 @@ const Admin = (function () {
     if (group !== 'all') list = list.filter(p => p.group === group);
     if (q) list = list.filter(p => p.name.toLowerCase().includes(q));
 
-    const tbody = list.map(p => {
+    // phân trang (10/trang)
+    const ADM_PROD_PER = 10;
+    const total = list.length;
+    const pages = Math.max(1, Math.ceil(total / ADM_PROD_PER));
+    admProdPage = Math.min(admProdPage, pages);
+    const pageList = list.slice((admProdPage - 1) * ADM_PROD_PER, admProdPage * ADM_PROD_PER);
+
+    const tbody = pageList.map(p => {
       const catName = (cats.find(c => c.id === p.category) || {}).name || 'Khác';
       const groupName = (GROUPS.find(g => g.id === p.group) || {}).name;
+      const soldOut = p.is_available === false;
       return (
         '<tr data-id="' + p.id + '">' +
-        '<td><img class="thumb" src="' + (p.img.indexOf('data:') === 0 || p.img.indexOf('http') === 0 ? p.img : 'assets/images/' + p.img) + '" alt=""></td>' +
+        '<td><img class="thumb" src="' + UI.assetUrl(p.img) + '" alt=""></td>' +
         '<td><b>' + UI.esc(p.name) + '</b><div style="font-size:.78rem;color:var(--muted)">' + catName + ' · ' + groupName + '</div></td>' +
         '<td>' + UI.fmt(p.price) + '</td>' +
         '<td>' + (p.oldPrice > p.price ? UI.fmt(p.oldPrice) : '—') + '</td>' +
         '<td>' + UI.icon('star') + ' ' + p.rating + '</td>' +
         '<td>' + p.sold + '</td>' +
+        '<td><span class="badge-status ' + (soldOut ? 'badge-cancelled' : 'badge-done') + '">' + (soldOut ? 'Hết hàng' : 'Còn hàng') + '</span></td>' +
         '<td><div class="row-actions">' +
-        '<button class="icon-btn" data-act="edit" title="Sửa">' + UI.icon('edit') + '</button>' +
-        '<button class="icon-btn danger" data-act="del" title="Xoá">' + UI.icon('trash') + '</button>' +
+        (Store.isAdmin() ? '<button class="icon-btn" data-act="edit" title="Sửa">' + UI.icon('edit') + '</button>' : '') +
+        '<button class="icon-btn" data-act="avail" title="' + (soldOut ? 'Bật bán (còn hàng)' : 'Tắt bán (hết hàng)') + '">' + UI.icon(soldOut ? 'unlock' : 'lock') + '</button>' +
+        (Store.isAdmin() ? '<button class="icon-btn danger" data-act="del" title="Xoá">' + UI.icon('trash') + '</button>' : '') +
         '</div></td>' +
         '</tr>'
       );
     }).join('');
 
     document.getElementById('adm-products-table').innerHTML =
-      '<thead><tr><th>Ảnh</th><th>Tên</th><th>Giá</th><th>Giá cũ</th><th>Rating</th><th>Đã bán</th><th></th></tr></thead><tbody>' +
-      (tbody || '<tr><td colspan="7" style="text-align:center;color:var(--muted)">Không có sản phẩm</td></tr>') +
+      '<thead><tr><th>Ảnh</th><th>Tên</th><th>Giá</th><th>Giá cũ</th><th>Rating</th><th>Đã bán</th><th>Trạng thái</th><th></th></tr></thead><tbody>' +
+      (tbody || '<tr><td colspan="8" style="text-align:center;color:var(--muted)">Không có sản phẩm</td></tr>') +
       '</tbody>';
 
     document.querySelectorAll('#adm-products-table [data-act="edit"]').forEach(b => {
       b.addEventListener('click', () => openProductForm(Number(b.closest('tr').dataset.id)));
+    });
+    document.querySelectorAll('#adm-products-table [data-act="avail"]').forEach(b => {
+      b.addEventListener('click', async () => {
+        const tbody2 = b.closest('tr');
+        const id = Number(tbody2.dataset.id);
+        const p = Store.getProduct(id);
+        try {
+          const saved = await Store.toggleAvailability(id, !(p.is_available !== false));
+          renderProducts();
+          UI.toast(saved.is_available ? 'Đã bật bán "' + saved.name + '".' : 'Đã tắt bán "' + saved.name + '".', 'ok');
+        } catch (err) {
+          UI.toast(err.message, 'danger');
+        }
+      });
     });
     document.querySelectorAll('#adm-products-table [data-act="del"]').forEach(b => {
       b.addEventListener('click', async () => {
@@ -271,6 +323,12 @@ const Admin = (function () {
         }
       });
     });
+
+    // phân trang admin sản phẩm
+    const pagerEl = document.getElementById('adm-products-pager');
+    if (pagerEl) {
+      UI.pager(pagerEl, admProdPage, pages, total, np => { admProdPage = np; renderProducts(); });
+    }
   }
 
   function openProductForm(id) {
@@ -288,6 +346,7 @@ const Admin = (function () {
     document.getElementById('pf-img').value = p ? p.img : '';
     document.getElementById('pf-rating').value = p ? p.rating : 4.5;
     document.getElementById('pf-sold').value = p ? p.sold : 0;
+    document.getElementById('pf-avail').value = p && p.is_available === false ? '0' : '1';
     // preview ảnh
     const prev = document.getElementById('pf-img-preview');
     const img = document.getElementById('pf-img').value;
@@ -334,7 +393,12 @@ const Admin = (function () {
     img.src = url;
   });
 
-  document.getElementById('btn-new-product').addEventListener('click', () => openProductForm(null));
+  if (Store.isAdmin()) {
+    document.getElementById('btn-new-product').addEventListener('click', () => openProductForm(null));
+  } else {
+    const nb = document.getElementById('btn-new-product');
+    if (nb) nb.style.display = 'none';
+  }
   document.getElementById('product-form-modal').addEventListener('click', e => {
     if (e.target === document.getElementById('product-form-modal')) document.getElementById('product-form-modal').classList.remove('open');
   });
@@ -368,7 +432,8 @@ const Admin = (function () {
       img: finalImg,
       desc: document.getElementById('pf-desc').value.trim() || 'Món mới tại ShanCha, pha chế thủ công.',
       rating: Math.min(5, Math.max(0, Number(document.getElementById('pf-rating').value) || 4.5)),
-      sold: Number(document.getElementById('pf-sold').value) || 0
+      sold: Number(document.getElementById('pf-sold').value) || 0,
+      is_available: document.getElementById('pf-avail').value === '1'
     };
     try {
       await Store.saveProduct(product);
@@ -380,20 +445,41 @@ const Admin = (function () {
     }
   });
 
-  document.getElementById('adm-search').addEventListener('input', renderProducts);
-  document.getElementById('adm-cat').addEventListener('change', renderProducts);
-  document.getElementById('adm-group').addEventListener('change', renderProducts);
+  document.getElementById('adm-search').addEventListener('input', () => { admProdPage = 1; renderProducts(); });
+  document.getElementById('adm-cat').addEventListener('change', () => { admProdPage = 1; renderProducts(); });
+  document.getElementById('adm-group').addEventListener('change', () => { admProdPage = 1; renderProducts(); });
 
   /* ================= ĐƠN HÀNG =================
-     Bảng đơn hàng có lọc theo trạng thái; mỗi dòng có nút xem chi tiết
-     + dropdown đổi trạng thái (PATCH /api/orders/:code). */
+     Bảng đơn hàng có tìm kiếm + lọc trạng thái + đổi trạng thái (state machine)
+     + đổi trạng thái thanh toán. */
+  let orderQ = '';
   function renderOrders() {
     const status = document.getElementById('adm-status').value;
     let list = Store.getOrders();
     if (status !== 'all') list = list.filter(o => o.status === status);
+    if (orderQ) {
+      const q = orderQ.toLowerCase();
+      list = list.filter(o =>
+        (o.code || '').toLowerCase().includes(q) ||
+        (o.name || '').toLowerCase().includes(q) ||
+        (o.customer || '').toLowerCase().includes(q) ||
+        (o.phone || '').toLowerCase().includes(q)
+      );
+    }
+    /* phân trang (PHASE 26) */
+    const page = Number(document.getElementById('adm-orders-page') ? document.getElementById('adm-orders-page').value : 1) || 1;
+    const per = 20;
+    const total = list.length;
+    const pages = Math.max(1, Math.ceil(total / per));
+    const cur = Math.min(page, pages);
+    const pageList = list.slice((cur - 1) * per, cur * per);
 
-    const tbody = list.map(o => {
+    const tbody = pageList.map(o => {
       const itemCount = o.items.reduce((n, it) => n + it.qty, 0);
+      /* dropdown chỉ hiện trạng thái hợp lệ tiếp theo (state machine) */
+      const allowed = STATUS[o.status] ? STATUS[o.status].next : [];
+      const opts = (STATUS[o.status] ? ['<option value="' + o.status + '" selected>' + STATUS[o.status].label + '</option>'] : [])
+        .concat(allowed.map(s => '<option value="' + s + '">' + STATUS[s].label + '</option>')).join('');
       return (
         '<tr>' +
         '<td><b>' + o.code + '</b></td>' +
@@ -401,17 +487,28 @@ const Admin = (function () {
         '<td>' + itemCount + ' món</td>' +
         '<td>' + UI.fmt(o.total) + (o.promo ? '<div class="order-promo-tag">' + UI.esc(o.promo) + '</div>' : '') + '</td>' +
         '<td>' + (o.shipFee ? UI.fmt(o.shipFee) : 'Miễn phí') + (o.shipKm ? '<div class="order-km-tag">~' + o.shipKm + ' km</div>' : '') + '</td>' +
-        '<td>' + statusBadge(o.status) + '</td>' +
+        '<td>' + statusBadge(o.status) + '<div style="margin-top:4px">' + payBadge(o.payment_status) + '</div></td>' +
         '<td>' + UI.fmtDate(o.created) + '</td>' +
         '<td><div class="row-actions">' +
         '<button class="icon-btn" data-act="detail" title="Chi tiết">' + UI.icon('eye') + '</button>' +
-        '<select class="filter-select" data-act="status" style="padding:6px 8px">' +
-        Object.keys(STATUS).map(s => '<option value="' + s + '"' + (o.status === s ? ' selected' : '') + '>' + STATUS[s].label + '</option>').join('') +
+        '<select class="filter-select" data-act="status" style="padding:6px 8px"' + (allowed.length ? '' : ' disabled') + '>' + opts + '</select>' +
+        '<select class="filter-select" data-act="pay" style="padding:6px 8px">' +
+        Object.keys(PAYMENT_STATUS).map(p => '<option value="' + p + '"' + ((o.payment_status || 'pending') === p ? ' selected' : '') + '>' + PAYMENT_STATUS[p].label + '</option>').join('') +
         '</select>' +
         '</div></td>' +
         '</tr>'
       );
     }).join('');
+
+    const pag = pages > 1
+      ? '<div class="admin-pager">' +
+        '<span>Trang ' + cur + '/' + pages + ' (' + total + ' đơn)</span>' +
+        '<button class="btn btn-ghost btn-sm" data-page="' + (cur - 1) + '"' + (cur <= 1 ? ' disabled' : '') + '>‹ Trước</button>' +
+        '<button class="btn btn-ghost btn-sm" data-page="' + (cur + 1) + '"' + (cur >= pages ? ' disabled' : '') + '>Sau ›</button>' +
+        '</div>'
+      : '';
+    const pagerEl = document.getElementById('adm-orders-pager');
+    if (pagerEl) pagerEl.innerHTML = pag;
 
     document.getElementById('adm-orders-table').innerHTML =
       '<thead><tr><th>Mã</th><th>Khách</th><th>Số món</th><th>Tổng</th><th>Phí ship</th><th>Trạng thái</th><th>Thời gian</th><th>Thao tác</th></tr></thead><tbody>' +
@@ -425,11 +522,34 @@ const Admin = (function () {
       sel.addEventListener('change', async () => {
         const code = sel.closest('tr').querySelector('td b').textContent;
         try {
-          await Store.updateOrderStatus(code, sel.value);
+          await Store.setOrderStatus(code, sel.value);
           UI.toast('Đã cập nhật trạng thái đơn ' + code, 'ok');
         } catch (err) {
           UI.toast(err.message, 'danger');
         }
+        renderOrders();
+      });
+    });
+    document.querySelectorAll('#adm-orders-table [data-act="pay"]').forEach(sel => {
+      sel.addEventListener('change', async () => {
+        const code = sel.closest('tr').querySelector('td b').textContent;
+        try {
+          await Store.setOrderPayment(code, sel.value);
+          UI.toast('Đã cập nhật thanh toán đơn ' + code, 'ok');
+        } catch (err) {
+          UI.toast(err.message, 'danger');
+        }
+        renderOrders();
+      });
+    });
+    mapPager(pagerEl);
+  }
+  function mapPager(el) {
+    if (!el) return;
+    el.querySelectorAll('[data-page]').forEach(b => {
+      b.addEventListener('click', () => {
+        const page = Number(b.dataset.page);
+        document.getElementById('adm-orders-page').value = page;
         renderOrders();
       });
     });
@@ -456,6 +576,7 @@ const Admin = (function () {
       '<div class="detail-line"><span>Địa chỉ</span><b style="text-align:right">' + UI.esc(o.address) + '</b></div>' +
       (o.note ? '<div class="detail-line"><span>Ghi chú</span><b>' + UI.esc(o.note) + '</b></div>' : '') +
       '<div class="detail-line"><span>Thanh toán</span><b>' + ({ cod: 'COD', bank: 'Chuyển khoản', card: 'Thẻ' }[o.payMethod] || o.payMethod) + '</b></div>' +
+      '<div class="detail-line"><span>Trạng thái thanh toán</span><b>' + payBadge(o.payment_status) + '</b></div>' +
       '<div class="detail-line"><span>Nhận tại</span><b>' + UI.esc(o.store || '') + (o.store === 'Giao tận nơi' && o.shipFrom ? ' (giao từ ' + UI.esc(o.shipFrom) + ')' : '') + '</b></div>' +
       (o.lat && o.lng ? '<div class="detail-line"><span>Vị trí trên bản đồ</span><b><a href="https://maps.google.com/?q=' + o.lat + ',' + o.lng + '" target="_blank" rel="noopener" style="color:var(--primary);text-decoration:underline">Xem bản đồ</a></b></div>' : '');
     modal.classList.add('open');
@@ -467,14 +588,22 @@ const Admin = (function () {
   });
 
   document.getElementById('adm-status').addEventListener('change', renderOrders);
+  const admOrderSearch = document.getElementById('adm-order-search');
+  if (admOrderSearch) admOrderSearch.addEventListener('input', () => { orderQ = admOrderSearch.value.trim(); renderOrders(); });
 
   /* ================= KHÁCH HÀNG =================
      Bảng users: tên/@username, email, SĐT, vai trò, số đơn + tổng chi tiêu,
      trạng thái; nút khoá/mở khoá (xoá phiên) + xoá (không xoá được admin). */
+  let admUserPage = 1;
   function renderUsers() {
     const users = Store.getUsers();
     const orders = Store.getOrders();
-    const tbody = users.map(u => {
+    const ADM_USER_PER = 10;
+    const total = users.length;
+    const pages = Math.max(1, Math.ceil(total / ADM_USER_PER));
+    admUserPage = Math.min(admUserPage, pages);
+    const pageUsers = users.slice((admUserPage - 1) * ADM_USER_PER, admUserPage * ADM_USER_PER);
+    const tbody = pageUsers.map(u => {
       const orderCount = orders.filter(o => o.userId === u.id).length;
       const total = orders.filter(o => o.userId === u.id && o.status !== 'cancelled').reduce((s, o) => s + o.total, 0);
       return (
@@ -482,10 +611,14 @@ const Admin = (function () {
         '<td><b>' + UI.esc(u.name) + '</b><div style="font-size:.78rem;color:var(--muted)">@' + UI.esc(u.username) + '</div></td>' +
         '<td>' + UI.esc(u.email) + '</td>' +
         '<td>' + UI.esc(u.phone) + '</td>' +
-        '<td>' + (u.role === 'admin' ? '<span class="badge-admin">ADMIN</span>' : 'Khách hàng') + '</td>' +
+        '<td>' + (u.role === 'admin' ? '<span class="badge-admin">ADMIN</span>' : u.role === 'staff' ? '<span class="badge-status badge-processing">STAFF</span>' : 'Khách hàng') + '</td>' +
         '<td>' + orderCount + ' đơn · ' + UI.fmt(total) + '</td>' +
         '<td>' + (u.blocked ? '<span class="badge-status badge-cancelled">Bị khoá</span>' : '<span class="badge-status badge-done">Hoạt động</span>') + '</td>' +
         '<td><div class="row-actions">' +
+        (u.role !== 'admin' ? '<select class="filter-select" data-act="role" data-id="' + u.id + '" style="padding:4px 6px;font-size:.8rem">' +
+          '<option value="customer"' + (u.role === 'customer' ? ' selected' : '') + '>KH</option>' +
+          '<option value="staff"' + (u.role === 'staff' ? ' selected' : '') + '>Staff</option>' +
+          '</select>' : '') +
         (u.role !== 'admin' ? '<button class="icon-btn" data-act="block" title="' + (u.blocked ? 'Mở khoá' : 'Khoá') + '">' + UI.icon(u.blocked ? 'unlock' : 'lock') + '</button>' : '') +
         (u.role !== 'admin' ? '<button class="icon-btn danger" data-act="del" title="Xoá khách hàng">' + UI.icon('trash') + '</button>' : '') +
         '</div></td>' +
@@ -497,6 +630,21 @@ const Admin = (function () {
       '<thead><tr><th>Người dùng</th><th>Email</th><th>SĐT</th><th>Vai trò</th><th>Mua hàng</th><th>Trạng thái</th><th></th></tr></thead><tbody>' +
       tbody + '</tbody>';
 
+    document.querySelectorAll('#adm-users-table [data-act="role"]').forEach(sel => {
+      sel.addEventListener('change', async () => {
+        const uid = sel.dataset.id;
+        const users = Store.getUsers();
+        const u = users.find(x => x.id === uid);
+        if (!u || u.role === 'admin') return;
+        try {
+          await Store.updateUser({ ...u, role: sel.value });
+          renderUsers();
+          UI.toast('Đã đổi vai trò thành ' + (sel.value === 'staff' ? 'STAFF' : 'khách hàng') + '.', 'ok');
+        } catch (err) {
+          UI.toast(err.message, 'danger');
+        }
+      });
+    });
     document.querySelectorAll('#adm-users-table [data-act="block"]').forEach(b => {
       b.addEventListener('click', async () => {
         const uname = b.closest('tr').querySelector('td b').textContent;
@@ -529,6 +677,12 @@ const Admin = (function () {
         }
       });
     });
+
+    // phân trang khách hàng
+    const pagerEl = document.getElementById('adm-users-pager');
+    if (pagerEl) {
+      UI.pager(pagerEl, admUserPage, pages, total, np => { admUserPage = np; renderUsers(); });
+    }
   }
 
   /* ================= ĐÁNH GIÁ (sản phẩm + website) =================
@@ -536,6 +690,7 @@ const Admin = (function () {
      sản phẩm, lọc theo sao, tìm người gửi/nội dung) và Store.getSiteReviews().
      Nút Xoá: DELETE /api/reviews/:id (server tính lại rating sản phẩm)
      hoặc DELETE /api/site-reviews/:id. */
+  let admRvPage = 1, admSrPage = 1;
   function renderReviews() {
     // ---- Đánh giá sản phẩm ----
     const q = (document.getElementById('rv-search').value || '').toLowerCase();
@@ -550,7 +705,14 @@ const Admin = (function () {
     const rvBadge = document.getElementById('rv-count-badge');
     if (rvBadge) rvBadge.textContent = list.length + ' / ' + Store.getReviews().length + ' lượt';
 
-    const rvTbody = list.map(r => {
+    // phân trang đánh giá sản phẩm (8/trang)
+    const RV_PER = 8;
+    const total = list.length;
+    const pages = Math.max(1, Math.ceil(total / RV_PER));
+    admRvPage = Math.min(admRvPage, pages);
+    const pageList = list.slice((admRvPage - 1) * RV_PER, admRvPage * RV_PER);
+
+    const rvTbody = pageList.map(r => {
       const p = Store.getProduct(r.productId);
       const prodName = p ? p.name : 'Sản phẩm #' + r.productId;
       return (
@@ -559,8 +721,11 @@ const Admin = (function () {
         '<td><b>' + UI.esc(r.userName) + '</b></td>' +
         '<td><span class="stars">' + '★'.repeat(r.rating) + '</span></td>' +
         '<td class="review-comment">' + UI.esc(r.comment || '—') + '</td>' +
+        '<td>' + (r.status === 'approved' || r.status === '' ? '<span class="badge-status badge-done">Đã duyệt</span>' : r.status === 'hidden' ? '<span class="badge-status badge-cancelled">Đã ẩn</span>' : '<span class="badge-status badge-processing">Chờ duyệt</span>') + '</td>' +
         '<td>' + UI.fmtDate(r.created) + '</td>' +
         '<td><div class="row-actions">' +
+        '<button class="icon-btn" data-act="mod-review" data-status="approved" title="Duyệt">' + UI.icon('check') + '</button>' +
+        '<button class="icon-btn" data-act="mod-review" data-status="hidden" title="Ẩn">' + UI.icon('eye') + '</button>' +
         '<button class="icon-btn danger" data-act="del-review" title="Xoá">' + UI.icon('trash') + '</button>' +
         '</div></td>' +
         '</tr>'
@@ -568,10 +733,23 @@ const Admin = (function () {
     }).join('');
 
     document.getElementById('adm-reviews-table').innerHTML =
-      '<thead><tr><th>Sản phẩm</th><th>Người gửi</th><th>Sao</th><th>Nội dung</th><th>Thời gian</th><th></th></tr></thead><tbody>' +
-      (rvTbody || '<tr><td colspan="6" style="text-align:center;color:var(--muted)">Chưa có đánh giá sản phẩm</td></tr>') +
+      '<thead><tr><th>Sản phẩm</th><th>Người gửi</th><th>Sao</th><th>Nội dung</th><th>Trạng thái</th><th>Thời gian</th><th></th></tr></thead><tbody>' +
+      (rvTbody || '<tr><td colspan="7" style="text-align:center;color:var(--muted)">Chưa có đánh giá sản phẩm</td></tr>') +
       '</tbody>';
 
+    document.querySelectorAll('#adm-reviews-table [data-act="mod-review"]').forEach(b => {
+      b.addEventListener('click', async () => {
+        const id = Number(b.closest('tr').dataset.id);
+        const status = b.dataset.status;
+        try {
+          await Store.modReview(id, status);
+          renderReviews();
+          UI.toast(status === 'approved' ? 'Đã duyệt đánh giá.' : 'Đã ẩn đánh giá.', 'ok');
+        } catch (err) {
+          UI.toast(err.message, 'danger');
+        }
+      });
+    });
     document.querySelectorAll('#adm-reviews-table [data-act="del-review"]').forEach(b => {
       b.addEventListener('click', async () => {
         const id = Number(b.closest('tr').dataset.id);
@@ -588,6 +766,12 @@ const Admin = (function () {
       });
     });
 
+    // phân trang đánh giá sản phẩm
+    const rvPager = document.getElementById('adm-reviews-pager');
+    if (rvPager) {
+      UI.pager(rvPager, admRvPage, pages, total, np => { admRvPage = np; renderReviews(); });
+    }
+
     // ---- Đánh giá website ----
     const sq = (document.getElementById('sr-search').value || '').toLowerCase();
     let sList = Store.getSiteReviews();
@@ -599,7 +783,14 @@ const Admin = (function () {
     const srBadge = document.getElementById('sr-count-badge');
     if (srBadge) srBadge.textContent = sList.length + ' / ' + Store.getSiteReviews().length + ' lượt';
 
-    const srTbody = sList.map(r =>
+    // phân trang đánh giá website (8/trang)
+    const SR_PER = 8;
+    const sTotal = sList.length;
+    const sPages = Math.max(1, Math.ceil(sTotal / SR_PER));
+    admSrPage = Math.min(admSrPage, sPages);
+    const sPageList = sList.slice((admSrPage - 1) * SR_PER, admSrPage * SR_PER);
+
+    const srTbody = sPageList.map(r =>
       '<tr data-id="' + r.id + '">' +
       '<td><b>' + UI.esc(r.userName) + '</b></td>' +
       '<td><span class="stars">' + '★'.repeat(r.rating) + '</span></td>' +
@@ -629,6 +820,12 @@ const Admin = (function () {
         }
       });
     });
+
+    // phân trang đánh giá website
+    const srPager = document.getElementById('adm-site-reviews-pager');
+    if (srPager) {
+      UI.pager(srPager, admSrPage, sPages, sTotal, np => { admSrPage = np; renderReviews(); });
+    }
   }
 
   document.getElementById('rv-search').addEventListener('input', renderReviews);
@@ -1181,6 +1378,96 @@ const Admin = (function () {
     });
   }
   document.getElementById('nl-search').addEventListener('input', renderNewsletters);
+
+  /* ================= NHẬT KÝ HỆ THỐNG (AUDIT — PHASE 25) ================= */
+  /* Bảng chuyển mã hành động máy (action) -> câu mô tả tiếng Việt rõ ràng */
+  const AUDIT_LABEL = {
+    USER_CHANGE_PASSWORD: 'Đổi mật khẩu',
+    ADMIN_UPDATE_PRODUCT: 'Sửa sản phẩm',
+    ADMIN_CREATE_PRODUCT: 'Thêm sản phẩm mới',
+    ADMIN_DELETE_PRODUCT: 'Xoá sản phẩm',
+    ADMIN_SET_PRODUCT_TOPPINGS: 'Cập nhật topping cho sản phẩm',
+    STAFF_TOGGLE_AVAILABILITY: 'Đổi trạng thái còn/hết hàng',
+    ADMIN_UPDATE_ORDER: 'Cập nhật trạng thái đơn hàng',
+    STAFF_UPDATE_ORDER: 'Xử lý đơn hàng',
+    ADMIN_UPDATE_PAYMENT: 'Cập nhật thanh toán đơn hàng',
+    STAFF_UPDATE_PAYMENT: 'Cập nhật thanh toán đơn hàng',
+    ORDER_CANCELLED: 'Huỷ đơn hàng',
+    ADMIN_CHANGE_ROLE: 'Đổi vai trò tài khoản',
+    ADMIN_UPDATE_USER: 'Cập nhật thông tin người dùng',
+    ADMIN_UPDATE_SETTINGS: 'Cập nhật cài đặt website',
+    ADMIN_MODERATE_REVIEW: 'Duyệt/ẩn đánh giá sản phẩm',
+    ADMIN_MODERATE_SITE_REVIEW: 'Duyệt/ẩn đánh giá website',
+    ADMIN_DELETE_REVIEW: 'Xoá đánh giá sản phẩm',
+    ADMIN_DELETE_SITE_REVIEW: 'Xoá đánh giá website'
+  };
+  /* Mô tả chi tiết tiếng Việt tuỳ theo action + details JSON */
+  function auditDetail(a) {
+    let d = {};
+    try { d = JSON.parse(a.details || '{}'); } catch (e) {}
+    switch (a.action) {
+      case 'STAFF_TOGGLE_AVAILABILITY':
+        return d.is_available ? 'Bật bán: sản phẩm còn hàng, khách đặt được.' : 'Tắt bán: sản phẩm hết hàng, khách không đặt được.';
+      case 'ADMIN_UPDATE_ORDER':
+      case 'STAFF_UPDATE_ORDER':
+        return 'Chuyển trạng thái từ "' + (d.from || '?') + '" sang "' + (d.to || '?') + '".';
+      case 'ADMIN_UPDATE_PAYMENT':
+      case 'STAFF_UPDATE_PAYMENT':
+        return 'Đổi trạng thái thanh toán: ' + ({ pending: 'Chờ thanh toán', paid: 'Đã thanh toán', failed: 'Thanh toán lỗi', refunded: 'Đã hoàn tiền' }[d.payment_status] || d.payment_status || '?') + '.';
+      case 'ADMIN_CREATE_PRODUCT':
+        return 'Đã thêm sản phẩm "' + (d.name || a.targetId) + '".';
+      case 'ADMIN_UPDATE_PRODUCT':
+        return 'Đã cập nhật sản phẩm "' + (d.name || a.targetId) + '".';
+      case 'ADMIN_DELETE_PRODUCT':
+        return 'Đã xoá sản phẩm (mã ' + a.targetId + ').';
+      case 'ADMIN_SET_PRODUCT_TOPPINGS':
+        return 'Cập nhật ' + (d.count || 0) + ' topping cho sản phẩm (mã ' + a.targetId + ').';
+      case 'ADMIN_UPDATE_SETTINGS':
+        return 'Đã thay đổi: ' + (d.keys || []).map(k => ({ siteName: 'Tên web', slogan: 'Slogan', themeColor: 'Màu chủ đạo', logo: 'Logo', salePercent: '% Flash sale' }[k] || k)).join(', ');
+      case 'ORDER_CANCELLED':
+        return 'Huỷ đơn' + (d.reason ? ' (' + d.reason + ')' : '');
+      case 'ADMIN_CHANGE_ROLE':
+        return 'Đổi vai trò tài khoản (mã ' + a.targetId + ').';
+      case 'ADMIN_UPDATE_USER':
+        return 'Cập nhật tài khoản người dùng (mã ' + a.targetId + ').';
+      case 'ADMIN_MODERATE_REVIEW':
+      case 'ADMIN_MODERATE_SITE_REVIEW':
+        return ({ approved: 'Đã duyệt đánh giá', hidden: 'Đã ẩn đánh giá' }[d.status] || 'Đổi trạng thái duyệt') + '.';
+      case 'ADMIN_DELETE_REVIEW':
+        return 'Đã xoá đánh giá sản phẩm (mã ' + a.targetId + ').';
+      case 'ADMIN_DELETE_SITE_REVIEW':
+        return 'Đã xoá đánh giá website (mã ' + a.targetId + ').';
+      default:
+        return d && Object.keys(d).length ? JSON.stringify(d) : a.details || '';
+    }
+  }
+  function renderAudit() {
+    const q = (document.getElementById('audit-search').value || '').toLowerCase();
+    let list = Store.getAuditLogs();
+    if (q) list = list.filter(a =>
+      (a.action || '').toLowerCase().includes(q) ||
+      (a.username || '').toLowerCase().includes(q) ||
+      (a.targetId || '').toLowerCase().includes(q)
+    );
+    const badge = document.getElementById('audit-count');
+    if (badge) badge.textContent = list.length + ' bản ghi';
+    const tbody = list.map(a =>
+      '<tr>' +
+      '<td><b>' + UI.esc(AUDIT_LABEL[a.action] || a.action) + '</b></td>' +
+      '<td>' + UI.esc(a.username || a.userId || '—') + '</td>' +
+      '<td>' + UI.esc(a.targetType || '—') + (a.targetId ? ' · ' + UI.esc(a.targetId) : '') + '</td>' +
+      '<td class="review-comment">' + UI.esc(auditDetail(a)) + '</td>' +
+      '<td>' + UI.esc(a.ip || '') + '</td>' +
+      '<td>' + UI.fmtDate(a.created) + '</td>' +
+      '</tr>'
+    ).join('');
+    document.getElementById('adm-audit-table').innerHTML =
+      '<thead><tr><th>Hành động</th><th>Người thực hiện</th><th>Mục tiêu</th><th>Chi tiết</th><th>IP</th><th>Thời gian</th></tr></thead><tbody>' +
+      (tbody || '<tr><td colspan="6" style="text-align:center;color:var(--muted)">Chưa có bản ghi nào</td></tr>') +
+      '</tbody>';
+  }
+  const auditSearch = document.getElementById('audit-search');
+  if (auditSearch) auditSearch.addEventListener('input', renderAudit);
 
   /* ================= TOPPING (CRUD) ================= */
   function renderToppings() {

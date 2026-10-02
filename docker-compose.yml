@@ -1,0 +1,25 @@
+# ============================================================
+#   ShanChaStore - docker-compose.yml
+#   Cách chạy cho người mua / bản production:
+#       docker compose up -d
+#   -> website mở tại http://localhost:3000
+#   Dữ liệu (database.db + ảnh upload) được giữ trong ./data
+#   -> xoá container vẫn KHÔNG mất dữ liệu.
+# ============================================================
+services:
+  shancha:
+    build: .
+    container_name: shancha-store
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=3000
+      - DATABASE_PATH=/app/data/database.db
+      - UPLOAD_DIR=/app/data/uploads
+      # - ADMIN_PASSWORD=thay-bang-mat-khau-manh   # bỏ comment để seed admin bằng mật khẩu riêng
+      # - TRUST_PROXY=1                             # bỏ comment nếu chạy sau nginx/reverse proxy
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

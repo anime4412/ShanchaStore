@@ -38,12 +38,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   const STATUS = {
-    processing: { label: 'Chờ xử lý', cls: 'badge-processing' },
+    pending: { label: 'Chờ xác nhận', cls: 'badge-processing' },
+    confirmed: { label: 'Đã xác nhận', cls: 'badge-processing' },
+    preparing: { label: 'Đang pha chế', cls: 'badge-delivering' },
+    ready: { label: 'Sẵn sàng', cls: 'badge-delivering' },
     delivering: { label: 'Đang giao', cls: 'badge-delivering' },
-    done: { label: 'Hoàn thành', cls: 'badge-done' },
+    completed: { label: 'Hoàn thành', cls: 'badge-done' },
     cancelled: { label: 'Đã huỷ', cls: 'badge-cancelled' }
   };
   const PAY_LABEL = { cod: 'COD', bank: 'Chuyển khoản', card: 'Thẻ tín dụng' };
+  /* Đơn có thể hủy được (PHASE 22) */
+  const CANCELABLE = ['pending', 'confirmed'];
   function statusBadge(s) {
     const st = STATUS[s] || STATUS.processing;
     return '<span class="badge-status ' + st.cls + '">' + st.label + '</span>';
@@ -104,6 +109,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         (o.promo ? ' · Ưu đãi ' + UI.esc(o.promo) : '') +
         ' · ' + (PAY_LABEL[o.payMethod] || o.payMethod) +
         '</div>' +
+        '<div class="pf-order-meta">' +
+        UI.esc(o.store || 'Giao tận nơi') +
+        (o.shipKm ? ' · ~' + o.shipKm + ' km từ ' + UI.esc(o.shipFrom) : '') +
+        (o.promo ? ' · Ưu đãi ' + UI.esc(o.promo) : '') +
+        ' · ' + (PAY_LABEL[o.payMethod] || o.payMethod) +
+        (o.payment_status === 'paid' ? ' · <span class="pf-order-paid">Đã thanh toán</span>' : '') +
+        '</div>' +
         '<div class="pf-order-foot">' +
         '<span>' +
         (o.lat && o.lng
@@ -111,6 +123,9 @@ document.addEventListener('DOMContentLoaded', async () => {
           : (o.discount > 0 ? '<span class="pf-order-discount">Đã giảm ' + UI.fmt(o.discount) + '</span>' : '')) +
         '</span>' +
         '<b class="pf-order-total">' + UI.fmt(o.total) + '</b>' +
+        (CANCELABLE.includes(o.status)
+          ? '<button class="btn btn-outline btn-sm" data-cancel="' + o.code + '" style="margin-left:8px">Huỷ đơn</button>'
+          : '') +
         '</div>' +
         '</div>'
       );
@@ -160,5 +175,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('pf-orders').innerHTML =
       '<p class="pf-empty">Không tải được lịch sử đơn hàng: ' + UI.esc(err.message) + '</p>';
   }
+
+  /* ---------- Hủy đơn (PHASE 22) ---------- */
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-cancel]');
+    if (!btn) return;
+    const code = btn.dataset.cancel;
+    if (!confirm('Bạn chắc chắn muốn hủy đơn ' + code + '?')) return;
+    try {
+      await Store.cancelOrder(code);
+      UI.toast('Đã hủy đơn ' + code + '.', 'ok');
+      const orders = await Store.myOrders();
+      renderOrders(orders);
+    } catch (err) {
+      UI.toast(err.message, 'danger');
+    }
+  });
 
 });

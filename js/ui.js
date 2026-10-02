@@ -56,9 +56,14 @@ const UI = (function () {
     );
   }
 
-  /* ---------- Ảnh sản phẩm: ảnh thật (products/*.jpg), fallback SVG cũ ---------- */
+  /* ---------- Ảnh sản phẩm: ảnh thật (products/*.jpg), uploads/, fallback SVG cũ ---------- */
+  function assetUrl(src) {
+    if (!src) return "assets/images/logo.svg";
+    if (src.indexOf("data:") === 0 || src.indexOf("http") === 0 || src.indexOf("/uploads/") === 0) return src;
+    return "assets/images/" + src;
+  }
   function imgTag(p, cls) {
-    const direct = p.img.indexOf("data:") === 0 || p.img.indexOf("http") === 0;
+    const direct = p.img.indexOf("data:") === 0 || p.img.indexOf("http") === 0 || p.img.indexOf("/uploads/") === 0;
     const src = direct ? p.img : "assets/images/" + p.img;
     const base =
       !direct && p.img.indexOf("products/") === 0
@@ -136,6 +141,9 @@ const UI = (function () {
     mail: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="m22 6-10 7L2 6"/></svg>',
     google:
       '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M23.49 12.27c0-.79-.07-1.54-.19-2.27H12v4.51h6.47a5.53 5.53 0 0 1-2.4 3.58v3h3.87c2.27-2.09 3.55-5.17 3.55-8.82z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.87-3c-1.08.72-2.45 1.16-4.06 1.16-3.13 0-5.78-2.11-6.73-4.96H1.29v3.09A11.99 11.99 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.27 14.29A7.19 7.19 0 0 1 4.89 12c0-.8.14-1.57.38-2.29V6.62H1.29a11.98 11.98 0 0 0 0 10.76l3.98-3.09z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.94 1.19 15.23 0 12 0 7.31 0 3.26 2.69 1.29 6.62l3.98 3.09C6.22 6.86 8.87 4.75 12 4.75z"/></svg>',
+    leaf: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>',
+    flask: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6M10 3v5.5L4.5 19a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L14 8.5V3"/><path d="M7.5 15h9"/></svg>',
+    heart: '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
   };
   function icon(name) {
     return ICONS[name] || "";
@@ -227,7 +235,10 @@ const UI = (function () {
       '<a class="nav-link' +
       (active === "products" ? " active" : "") +
       '" href="products.html">Menu</a>' +
-      '<a class="nav-link" href="index.html#story">Giới thiệu</a>' +
+      '<a class="nav-link' +
+      (active === "about" ? " active" : "") +
+      '" href="about.html">Giới thiệu</a>' +
+      '<a class="nav-link" href="index.html#story">Câu chuyện</a>' +
       '<a class="nav-link" href="index.html#stores">Chi nhánh</a>' +
       "</nav>" +
       '<div class="header-actions">' +
@@ -327,7 +338,7 @@ const UI = (function () {
       esc(p.desc) +
       "</p>" +
       '<div class="modal-toppings"><h4>Topping</h4>' +
-      Store.getToppings()
+      Store.getProductToppings(p.id)
         .map(
           (t) =>
             '<label class="topping"><input type="checkbox" value="' +
@@ -520,15 +531,17 @@ const UI = (function () {
   /* ---------- Card sản phẩm ---------- */
   function productCard(p) {
     const isSale = p.oldPrice > p.price;
+    const soldOut = p.is_available === false;
     return (
-      '<div class="product-card" data-id="' +
+      '<div class="product-card' + (soldOut ? ' sold-out' : '') + '" data-id="' +
       p.id +
       '">' +
-      (isSale
+      (isSale && !soldOut
         ? '<span class="badge-sale">- ' +
           Math.round((1 - p.price / p.oldPrice) * 100) +
           "%</span>"
         : "") +
+      (soldOut ? '<span class="badge-sale">Hết hàng</span>' : "") +
       '<div class="product-img">' +
       imgTag(p, "") +
       "</div>" +
@@ -543,7 +556,7 @@ const UI = (function () {
       esc(p.name) +
       "</h3>" +
       '<div class="product-price">' +
-      (isSale ? '<span class="price-old">' + fmt(p.oldPrice) + "</span>" : "") +
+      (isSale && !soldOut ? '<span class="price-old">' + fmt(p.oldPrice) + "</span>" : "") +
       '<span class="price-now">' +
       fmt(p.price) +
       "</span>" +
@@ -556,12 +569,38 @@ const UI = (function () {
       p.sold +
       " đã bán</div>" +
       '<div class="product-actions">' +
-      '<button class="btn btn-outline btn-sm" data-act="view">Xem chi tiết</button>' +
-      '<button class="btn btn-primary btn-sm" data-act="add">Thêm giỏ</button>' +
+      '<button class="btn btn-outline btn-sm" data-act="view"' + (soldOut ? ' disabled' : '') + '>Xem chi tiết</button>' +
+      (soldOut
+        ? '<button class="btn btn-primary btn-sm" disabled>Hết hàng</button>'
+        : '<button class="btn btn-primary btn-sm" data-act="add">Thêm giỏ</button>') +
       "</div>" +
       "</div>" +
       "</div>"
     );
+  }
+
+  /* ---------- Pager dùng chung ----------
+     UI.pager(container, page, pages, total, onGo)
+     - container: element HTML hiển thị phân trang (có thể null).
+     - page/pages/total: trang hiện tại, tổng trang, tổng số phần tử.
+     - onGo(np): callback khi bấm sang trang np (1-based). */
+  function pager(container, page, pages, total, onGo) {
+    if (!container) return;
+    if (!pages || pages <= 1) { container.innerHTML = ''; return; }
+    let html = '<span class="pager-info">Trang ' + page + '/' + pages + (total ? ' · ' + total + ' mục' : '') + '</span>';
+    html += '<button data-p="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>‹</button>';
+    for (let i = 1; i <= pages; i++) {
+      html += '<button data-p="' + i + '"' + (i === page ? ' class="active"' : '') + '>' + i + '</button>';
+    }
+    html += '<button data-p="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + '>›</button>';
+    container.innerHTML = html;
+    container.querySelectorAll('button[data-p]').forEach(b => {
+      b.addEventListener('click', () => {
+        const np = Number(b.dataset.p);
+        if (np < 1 || np > pages) return;
+        onGo && onGo(np);
+      });
+    });
   }
 
   /* ---------- Khởi tạo UI chung trên mọi trang ---------- */
@@ -612,9 +651,11 @@ const UI = (function () {
     fmt,
     fmtDate,
     esc,
+    assetUrl,
     imgTag,
     icon,
     toast,
+    pager,
     renderHeader,
     updateCartBadge,
     openDrawer,

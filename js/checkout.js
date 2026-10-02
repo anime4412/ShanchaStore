@@ -298,7 +298,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         promoMsg.textContent = 'Đã áp dụng: ' + data.promo.label + '.';
       }
     } catch (e) {
-      UI.toast('Không kết nối được máy chủ để kiểm tra mã.', 'danger');
+      UI.toast(e && e.message ? e.message : 'Không kiểm tra được mã. Vui lòng thử lại.', 'danger');
       return;
     }
     renderSummary();

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Khu vực Nhân viên – ShanCha Store</title>
+  <meta name="description" content="Trang làm việc dành cho nhân viên ShanCha Store: xử lý đơn hàng, bật/tắt sản phẩm hết hàng, hồ sơ cá nhân.">
+  <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-body">
+
+  <!-- ============================================================
+       TRANG NHÂN VIÊN (staff.html) — CHỈ STAFF VÀ ADMIN
+       - Sidebar: Dashboard, Đơn hàng, Sản phẩm, Topping, Hồ sơ, Đăng xuất.
+       - KHÔNG hiển thị chức năng admin (Khách hàng, Cài đặt, Nhật ký...).
+       - Bảo vệ: staff.js gate() — customer bị chặn, admin được phép vào.
+       ============================================================ -->
+  <aside class="admin-sidebar">
+    <div class="admin-brand"><span class="brand-text">ShanCha Staff</span></div>
+    <div class="sidebar-col sidebar-nav-col">
+      <div class="sidebar-group-label">Làm việc</div>
+      <nav class="admin-nav" aria-label="Khu vực nhân viên">
+        <button class="active" data-view="dashboard"><span class="nav-ic" data-ic="dash"></span><span>Dashboard</span></button>
+        <button data-view="orders"><span class="nav-ic" data-ic="box"></span><span>Đơn hàng</span></button>
+        <button data-view="products"><span class="nav-ic" data-ic="cup"></span><span>Sản phẩm</span></button>
+        <button data-view="toppings"><span class="nav-ic" data-ic="topping"></span><span>Topping</span></button>
+      </nav>
+    </div>
+    <div class="sidebar-sys-col">
+      <div class="sidebar-group-label" style="margin-top:2px">Tài khoản</div>
+      <nav class="admin-nav admin-nav-sys" aria-label="Tài khoản">
+        <button data-view="profile"><span class="nav-ic" data-ic="user"></span><span>Hồ sơ</span></button>
+        <a class="nav-sys-link" href="index.html"><span class="nav-ic" data-ic="chevL"></span><span>Về trang chủ</span></a>
+        <button id="staff-logout"><span class="nav-ic" data-ic="logout"></span><span>Đăng xuất</span></button>
+      </nav>
+    </div>
+  </aside>
+
+  <main class="admin-main">
+    <div class="admin-top">
+      <h1 id="view-title">Dashboard</h1>
+      <div class="admin-user">
+        <span id="staff-user-name"></span>
+        <span class="badge-status badge-processing">STAFF</span>
+      </div>
+    </div>
+
+    <!-- Dashboard -->
+    <section id="view-dashboard">
+      <div class="kpi-grid" id="staff-kpi-grid"></div>
+      <div class="panel">
+        <div class="panel-head"><h2>Đơn hàng gần đây</h2></div>
+        <div class="table-wrap"><table class="table" id="staff-recent-orders"></table></div>
+      </div>
+    </section>
+
+    <!-- Đơn hàng -->
+    <section id="view-orders" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Quản lý đơn hàng</h2>
+          <div class="admin-toolbar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+            <input type="search" id="st-order-search" placeholder=" Tìm mã / khách / SĐT…" style="flex:1;min-width:180px">
+            <select id="st-status" class="filter-select">
+              <option value="all">Tất cả trạng thái</option>
+              <option value="pending">Chờ xác nhận</option>
+              <option value="confirmed">Đã xác nhận</option>
+              <option value="preparing">Đang pha chế</option>
+              <option value="ready">Sẵn sàng</option>
+              <option value="delivering">Đang giao</option>
+              <option value="completed">Hoàn thành</option>
+              <option value="cancelled">Đã huỷ</option>
+            </select>
+          </div>
+        </div>
+        <div class="table-wrap"><table class="table" id="staff-orders-table"></table></div>
+        <div id="staff-orders-pager"></div>
+        <input type="hidden" id="staff-orders-page" value="1">
+      </div>
+    </section>
+
+    <!-- Sản phẩm -->
+    <section id="view-products" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Sản phẩm — bật/tắt khi hết hàng</h2>
+        </div>
+        <div class="admin-toolbar">
+          <input type="search" id="stp-search" placeholder=" Tìm sản phẩm…">
+        </div>
+        <div class="table-wrap"><table class="table" id="staff-products-table"></table></div>
+        <div class="pager" id="staff-products-pager"></div>
+      </div>
+    </section>
+
+    <!-- Topping -->
+    <section id="view-toppings" style="display:none">
+      <div class="panel">
+        <div class="panel-head"><h2>Topping (xem giá — không được sửa)</h2></div>
+        <div class="table-wrap"><table class="table" id="staff-toppings-table"></table></div>
+      </div>
+    </section>
+
+    <!-- Hồ sơ -->
+    <section id="view-profile" style="display:none">
+      <div class="panel" style="max-width:620px;margin:0 auto">
+        <div class="panel-head"><h2>Hồ sơ nhân viên</h2></div>
+        <div id="staff-profile-info" style="padding:0 0 16px"></div>
+        <form id="staff-profile-form" class="crud-form">
+          <div class="form-group"><label>Họ tên</label><input type="text" id="sp-name"></div>
+          <div class="form-group"><label>Email</label><input type="email" id="sp-email"></div>
+          <div class="form-group"><label>Số điện thoại</label><input type="tel" id="sp-phone"></div>
+          <div class="crud-actions full"><button class="btn btn-primary" type="submit">Lưu thông tin</button></div>
+        </form>
+        <div style="border-top:1px dashed var(--line);margin-top:20px;padding-top:20px">
+          <h3 style="margin-bottom:12px">Đổi mật khẩu</h3>
+          <form id="staff-pass-form" class="crud-form">
+            <div class="form-group"><label>Mật khẩu hiện tại</label><input type="password" id="sp-old-pass"></div>
+            <div class="form-group"><label>Mật khẩu mới (≥ 6 ký tự)</label><input type="password" id="sp-new-pass"></div>
+            <div class="form-group"><label>Xác nhận mật khẩu mới</label><input type="password" id="sp-new-pass2"></div>
+            <div class="crud-actions full"><button class="btn btn-primary" type="submit">Đổi mật khẩu</button></div>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal chi tiết đơn -->
+  <div class="modal" id="staff-order-modal">
+    <div class="modal-card small">
+      <button class="modal-close" id="staff-order-modal-close" aria-label="Đóng">×</button>
+      <div style="padding:26px" id="staff-order-modal-body"></div>
+    </div>
+  </div>
+
+  <script src="js/data.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="js/staff.js"></script>
+</body>
+</html>

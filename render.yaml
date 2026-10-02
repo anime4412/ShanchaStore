@@ -1,0 +1,31 @@
+# ============================================================
+#   ShanChaStore - Render Blueprint (render.yaml)
+#   Deploy nhanh lên Render.com: tạo Blueprint -> chọn repo -> tự chạy.
+#   Lưu ý: dùng bản instance có Disk (paid) để dữ liệu bền vững,
+#   hoặc dùng free tier cho demo ngắn hạn (DB bị xoá khi restart).
+# ============================================================
+services:
+  - type: web
+    name: shancha-store
+    runtime: node
+    plan: free
+    buildCommand: true   # không cần build (zero npm dep)
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 3000
+      - key: DATABASE_PATH
+        value: /var/data/database.db
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: ADMIN_PASSWORD
+        sync: false      # bạn nhập mật khẩu admin riêng khi tạo service
+    disk:
+      name: shancha-data
+      mountPath: /var/data
+      sizeGB: 1

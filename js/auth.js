@@ -69,16 +69,6 @@ const Auth = (function () {
     }
   }
 
-  /* ---------- Đăng nhập bằng Google (chế độ demo, chưa cấu hình Client ID) ---------- */
-  async function googleLoginDemo(email, name) {
-    try {
-      const user = await Store.googleLoginDemo(email, name);
-      return { ok: true, user };
-    } catch (err) {
-      return { ok: false, msg: err.message };
-    }
-  }
-
   /* ---------- Đăng xuất ---------- */
   function logout() { Store.logout(); }
 
@@ -97,5 +87,5 @@ const Auth = (function () {
     return false;
   }
 
-  return { validEmail, validPhone, validName, validPassword, register, login, googleLogin, googleLoginDemo, logout, requireLogin, requireAdmin };
+  return { validEmail, validPhone, validName, validPassword, register, login, googleLogin, logout, requireLogin, requireAdmin };
 })();

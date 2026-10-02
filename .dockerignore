@@ -1,0 +1,14 @@
+# Loại bỏ dữ liệu nhạy cảm / môi trường khi build image
+.env
+.env.local
+database.db
+database.db.bak
+*.db
+*.sqlite
+backups/
+logs/
+uploads/
+data/
+node_modules/
+.git/
+*.md

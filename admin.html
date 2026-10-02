@@ -51,6 +51,7 @@
         <button data-view="reviews"><span class="nav-ic" data-ic="comment"></span><span>Đánh giá</span></button>
         <button data-view="users"><span class="nav-ic" data-ic="users"></span><span>Khách hàng</span></button>
         <button data-view="settings"><span class="nav-ic" data-ic="gear"></span><span>Cài đặt</span></button>
+        <button data-view="audit"><span class="nav-ic" data-ic="clock"></span><span>Nhật ký hệ thống</span></button>
       </nav>
     </div>
     <div class="sidebar-sys-col">
@@ -115,6 +116,7 @@
         <div class="table-wrap">
           <table class="table" id="adm-products-table"></table>
         </div>
+        <div class="pager" id="adm-products-pager"></div>
       </div>
       <!-- Form thêm/sửa sản phẩm (POPUP MODAL) -->
       <div class="modal" id="product-form-modal">
@@ -149,6 +151,12 @@
               </div>
               <div class="form-group"><label>Đánh giá (0–5)</label><input type="number" id="pf-rating" min="0" max="5" step="0.1"></div>
               <div class="form-group"><label>Đã bán</label><input type="number" id="pf-sold" min="0"></div>
+              <div class="form-group full"><label>Trạng thái bán hàng</label>
+                <select id="pf-avail">
+                  <option value="1">Còn hàng (khách đặt được)</option>
+                  <option value="0">Hết hàng (tạm tắt, khách không đặt được)</option>
+                </select>
+              </div>
               <div class="crud-actions full">
                 <button class="btn btn-primary" type="submit"><span class="ic-inline" data-ic="save"></span> Lưu sản phẩm</button>
                 <button class="btn btn-ghost" type="button" id="pf-cancel">Huỷ</button>
@@ -422,15 +430,23 @@
       <div class="panel">
         <div class="panel-head">
           <h2>Quản lý đơn hàng</h2>
-          <select id="adm-status" class="filter-select">
-            <option value="all">Tất cả trạng thái</option>
-            <option value="processing">Chờ xử lý</option>
-            <option value="delivering">Đang giao</option>
-            <option value="done">Hoàn thành</option>
-            <option value="cancelled">Đã huỷ</option>
-          </select>
+          <div class="admin-toolbar" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+            <input type="search" id="adm-order-search" placeholder=" Tìm mã / khách / SĐT…" style="flex:1;min-width:180px">
+            <select id="adm-status" class="filter-select">
+              <option value="all">Tất cả trạng thái</option>
+              <option value="pending">Chờ xác nhận</option>
+              <option value="confirmed">Đã xác nhận</option>
+              <option value="preparing">Đang pha chế</option>
+              <option value="ready">Sẵn sàng</option>
+              <option value="delivering">Đang giao</option>
+              <option value="completed">Hoàn thành</option>
+              <option value="cancelled">Đã huỷ</option>
+            </select>
+          </div>
         </div>
         <div class="table-wrap"><table class="table" id="adm-orders-table"></table></div>
+        <div id="adm-orders-pager"></div>
+        <input type="hidden" id="adm-orders-page" value="1">
       </div>
     </section>
 
@@ -453,6 +469,7 @@
           </select>
         </div>
         <div class="table-wrap"><table class="table" id="adm-reviews-table"></table></div>
+        <div class="pager" id="adm-reviews-pager"></div>
       </div>
       <div class="panel">
         <div class="panel-head">
@@ -463,6 +480,7 @@
           <input type="search" id="sr-search" placeholder=" Tìm người gửi / nội dung…">
         </div>
         <div class="table-wrap"><table class="table" id="adm-site-reviews-table"></table></div>
+        <div class="pager" id="adm-site-reviews-pager"></div>
       </div>
     </section>
 
@@ -471,6 +489,7 @@
       <div class="panel">
         <div class="panel-head"><h2>Quản lý khách hàng</h2></div>
         <div class="table-wrap"><table class="table" id="adm-users-table"></table></div>
+        <div class="pager" id="adm-users-pager"></div>
       </div>
     </section>
 
@@ -509,6 +528,18 @@
           <div class="form-group full"><label>Ảnh story 3</label><input type="text" id="st-story-img-3" placeholder="assets/images/story-3.svg"></div>
           <div class="crud-actions full"><button class="btn btn-primary" type="submit">Lưu cài đặt</button></div>
         </form>
+      </div>
+    </section>
+
+    <!-- Nhật ký hệ thống (audit logs) -->
+    <section id="view-audit" style="display:none">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Nhật ký hệ thống (Audit Log)</h2>
+          <span class="badge-admin" id="audit-count">0</span>
+        </div>
+        <div class="admin-toolbar"><input type="search" id="audit-search" placeholder=" Tìm theo hành động / người / mục tiêu…"></div>
+        <div class="table-wrap"><table class="table" id="adm-audit-table"></table></div>
       </div>
     </section>
   </main>

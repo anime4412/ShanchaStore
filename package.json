@@ -1,0 +1,18 @@
+{
+  "name": "shancha-store",
+  "version": "2.0.0",
+  "description": "ShanCha Store – website bán trà sữa (Node.js thuần + Express-free + SQLite). Assignment WEB1044 – Lập trình cơ sở với JavaScript.",
+  "main": "server.js",
+  "private": true,
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "backup": "node tools/backup.js",
+    "test": "node tools/smoke-test.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "keywords": ["nodejs", "sqlite", "express-free", "vanilla-js", "assignment"],
+  "license": "UNLICENSED"
+}

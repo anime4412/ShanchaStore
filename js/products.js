@@ -42,6 +42,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   let query = '';
   let cat = catFilter.value;
   let sortBy = sortSelect.value;
+  const PRODUCTS_PER_PAGE = 8;
+  let page = 1;
 
   function apply() {
     let list = Store.getProducts();
@@ -68,9 +70,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       default: break;
     }
 
-    countLabel.textContent = 'Hiển thị ' + list.length + ' sản phẩm.';
+    // phân trang
+    const total = list.length;
+    const pages = Math.max(1, Math.ceil(total / PRODUCTS_PER_PAGE));
+    page = Math.min(page, pages);
+    const pageList = list.slice((page - 1) * PRODUCTS_PER_PAGE, page * PRODUCTS_PER_PAGE);
+
+    countLabel.textContent = 'Hiển thị ' + pageList.length + ' / ' + total + ' sản phẩm.';
     emptyBox.style.display = list.length ? 'none' : 'block';
-    grid.innerHTML = list.map(UI.productCard).join('');
+    grid.innerHTML = pageList.map(UI.productCard).join('');
 
     grid.querySelectorAll('[data-act="view"]').forEach(b => {
       b.addEventListener('click', () => UI.openProductModal(Number(b.closest('.product-card').dataset.id)));
@@ -80,11 +88,33 @@ document.addEventListener('DOMContentLoaded', async () => {
         Cart.openToppingModal(Number(b.closest('.product-card').dataset.id), 'add');
       });
     });
+
+    // vẽ pager
+    const pager = document.getElementById('products-pager');
+    if (pager) {
+      if (pages <= 1) { pager.innerHTML = ''; return; }
+      let html = '<span class="pager-info">Trang ' + page + '/' + pages + ' · ' + total + ' sản phẩm</span>';
+      html += '<button data-p="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>‹</button>';
+      for (let i = 1; i <= pages; i++) {
+        html += '<button data-p="' + i + '"' + (i === page ? ' class="active"' : '') + '>' + i + '</button>';
+      }
+      html += '<button data-p="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + '>›</button>';
+      pager.innerHTML = html;
+      pager.querySelectorAll('button').forEach(b => {
+        b.addEventListener('click', () => {
+          const np = Number(b.dataset.p);
+          if (np < 1 || np > pages) return;
+          page = np;
+          apply();
+          grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      });
+    }
   }
 
-  searchInput.addEventListener('input', () => { query = searchInput.value.trim(); apply(); });
-  catFilter.addEventListener('change', () => { cat = catFilter.value; apply(); });
-  sortSelect.addEventListener('change', () => { sortBy = sortSelect.value; apply(); });
+  searchInput.addEventListener('input', () => { query = searchInput.value.trim(); page = 1; apply(); });
+  catFilter.addEventListener('change', () => { cat = catFilter.value; page = 1; apply(); });
+  sortSelect.addEventListener('change', () => { sortBy = sortSelect.value; page = 1; apply(); });
 
   apply();
 });

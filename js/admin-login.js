@@ -20,21 +20,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     Auth.logout();
   }
 
-  // Nếu đã đăng nhập admin -> vào thẳng trang quản trị
+  // Nếu đã đăng nhập admin/staff -> vào thẳng trang tương ứng
   const current = Store.currentUser();
   if (current) {
-    if (current.role === 'admin') {
-      location.href = 'admin.html';
-      return;
-    }
-    // Đang là khách hàng -> thông báo và không cho đăng nhập quản trị
+    if (current.role === 'admin') { location.href = 'admin.html'; return; }
+    if (current.role === 'staff') { location.href = 'staff.html'; return; }
+    // Đang là khách hàng -> thông báo và không cho vào khu vực này
     document.querySelector('.admin-login-card').innerHTML =
       '<div class="admin-login-shield"><span class="ic-big" data-ic="user"></span></div>' +
       '<div class="admin-login-title">Bạn đang đăng nhập với tài khoản khách</div>' +
       '<div class="admin-login-sub">Tài khoản hiện tại: <b>' + UI.esc(current.name) + '</b>. ' +
-      'Vui lòng đăng xuất rồi đăng nhập bằng tài khoản admin.</div>' +
+      'Vui lòng đăng xuất rồi đăng nhập bằng tài khoản <b>admin</b> hoặc <b>nhân viên</b>.</div>' +
       '<a class="btn btn-primary btn-block" href="admin-login.html?logout=1">Đăng xuất & đăng nhập lại</a>' +
-      '<div class="admin-login-links"><a href="index.html"><span class="nav-ic" data-ic="chevL"></span> Về trang chủ</a></div>';
+      '<div class="admin-login-links"><a href="login.html">Đăng nhập khách hàng</a> · <a href="index.html">Về trang chủ</a></div>';
     return;
   }
 
@@ -56,13 +54,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       UI.toast(res.msg, 'danger');
       return;
     }
-    if (res.user.role !== 'admin') {
+    if (res.user.role !== 'admin' && res.user.role !== 'staff') {
       Auth.logout();
-      UI.toast('Tài khoản này không có quyền quản trị.', 'danger');
+      UI.toast('Tài khoản này không có quyền truy cập khu vực quản lý.', 'danger');
       return;
     }
-    UI.toast('Đăng nhập quản trị thành công!', 'ok');
-    setTimeout(() => location.href = 'admin.html', 500);
+    UI.toast(res.user.role === 'admin' ? 'Đăng nhập quản trị thành công!' : 'Đăng nhập nhân viên thành công!', 'ok');
+    setTimeout(() => location.href = res.user.role === 'admin' ? 'admin.html' : 'staff.html', 500);
   });
 
 });

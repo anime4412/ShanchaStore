@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Giới thiệu – ShanCha Store</title>
+  <meta name="description" content="Tìm hiểu về ShanCha Store: câu chuyện thương hiệu trà Đà Lạt, giá trị cốt lõi và các chi nhánh.">
+  <link rel="icon" href="assets/images/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <header class="site-header" id="site-header"></header>
+
+  <!-- ============================================================
+       TRANG GIỚI THIỆU (about.html)
+       - Hero trang giới thiệu.
+       - Câu chuyện thương hiệu (render từ settings qua js/about.js).
+       - Giá trị cốt lõi (4 ô).
+       - Hành trình: 2019 → nay.
+       - Chi nhánh (render động từ Store.getStores()).
+       - Kêu gọi hành động: đến menu / đăng ký nhận ưu đãi.
+       ============================================================ -->
+  <main>
+    <!-- Hero -->
+    <section class="page-hero about-hero">
+      <h1>Về ShanCha</h1>
+      <p>“Sơn Trà” — trà trên núi, hương vị từ Đà Lạt</p>
+    </section>
+
+    <!-- Câu chuyện -->
+    <section class="section" id="about-story">
+      <div class="container story-grid">
+        <div class="story-imgs" id="about-story-imgs"></div>
+        <div class="story-text">
+          <span class="section-eyebrow">Câu chuyện ShanCha</span>
+          <h2>ShanCha – “Sơn Trà” hay còn hiểu là “trà trên núi”</h2>
+          <div id="about-story-paras"></div>
+          <div class="story-stats" id="about-story-stats"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Giá trị cốt lõi -->
+    <section class="section" id="values" style="background: var(--bg-soft)">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-eyebrow">Giá trị cốt lõi</span>
+          <h2 class="section-title">Điều ShanCha theo đuổi mỗi ngày</h2>
+        </div>
+        <div class="about-values">
+          <div class="about-value">
+            <span class="ic-big" data-ic="leaf"></span>
+            <h3>Nguyên liệu thật</h3>
+            <p>Trà nguyên chất từ vùng cao Đà Lạt, chọn lọc từng búp trà theo mùa.</p>
+          </div>
+          <div class="about-value">
+            <span class="ic-big" data-ic="flask"></span>
+            <h3>Pha chế thủ công</h3>
+            <p>Mỗi ly được pha chế tỉ mỉ bởi đội ngũ barista đam mê trà.</p>
+          </div>
+          <div class="about-value">
+            <span class="ic-big" data-ic="heart"></span>
+            <h3>Chăm sóc khách</h3>
+            <p>Không gian ấm cúng, phục vụ tận tâm — khách là người nhà.</p>
+          </div>
+          <div class="about-value">
+            <span class="ic-big" data-ic="tag"></span>
+            <h3>Giá minh bạch</h3>
+            <p>Giá công bằng cho chất lượng thật, ưu đãi rõ ràng cho khách quen.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Hành trình -->
+    <section class="section" id="journey">
+      <div class="container" style="max-width:760px">
+        <div class="section-head">
+          <span class="section-eyebrow">Hành trình</span>
+          <h2 class="section-title">Từ một góc nhỏ ở Đà Lạt</h2>
+        </div>
+        <div class="about-timeline">
+          <div class="about-step">
+            <b>2019</b>
+            <p>Khởi nguồn từ một xe trà nhỏ trên đường 3/2, Đà Lạt với đúng 3 món trà sữa.</p>
+          </div>
+          <div class="about-step">
+            <b>2021</b>
+            <p>Mở chi nhánh đầu tiên tại TP.HCM, đưa hương trà cao nguyên về thành phố.</p>
+          </div>
+          <div class="about-step">
+            <b>2023</b>
+            <p>Ra mắt bộ sưu tập trà signature: Ôlong Gạo Rang, Hojicha Caramel Mặn, Matcha Hạt Sen…</p>
+          </div>
+          <div class="about-step">
+            <b>2026</b>
+            <p>ShanCha Store — mua trà online mọi lúc mọi nơi, giao tận nơi hoặc nhận tại quán.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Chi nhánh -->
+    <section class="section" id="about-stores" style="background: var(--bg-soft)">
+      <div class="container">
+        <div class="section-head">
+          <span class="section-eyebrow">Cửa hàng</span>
+          <h2 class="section-title">Ghé ShanCha gần bạn</h2>
+        </div>
+        <div class="stores-grid" id="about-stores-grid"></div>
+      </div>
+    </section>
+
+    <!-- Kêu gọi hành động -->
+    <section class="section">
+      <div class="container newsletter">
+        <h2>Thử ngay một ly ShanCha?</h2>
+        <p>Khám phá menu signature hoặc đăng ký nhận ưu đãi mỗi tuần.</p>
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:16px">
+          <a class="btn btn-primary" href="products.html">Xem menu</a>
+          <a class="btn btn-accent" href="index.html#stores">Tìm chi nhánh</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer" id="site-footer"></footer>
+
+  <script src="js/data.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/cart.js"></script>
+  <script src="js/about.js"></script>
+  <script>
+    document.querySelectorAll("[data-ic]").forEach((el) => {
+      const nm = el.dataset.ic;
+      if (nm && UI.icon) el.innerHTML = UI.icon(nm);
+    });
+  </script>
+</body>
+</html>

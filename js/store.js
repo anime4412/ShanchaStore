@@ -15,7 +15,7 @@
                    đăng nhập (/api/me), admin thì tải thêm users+orders.
    - Giỏ hàng    : đọc/ghi localStorage theo thiết bị (addToCart/updateQty/...).
    - Sản phẩm    : getProducts (đọc cache), saveProduct/deleteProduct (qua API).
-   - Tài khoản   : register/login/googleLogin/googleLoginDemo -> lưu token +
+   - Tài khoản   : register/login/googleLogin -> lưu token +
                    set cache.me; logout xoá token; updateProfile sửa thông tin.
    - Đơn hàng    : placeOrder gửi giỏ lên server (server tính lại giá),
                    updateOrderStatus (admin), myOrders (lịch sử của tôi).
@@ -51,7 +51,7 @@ const Store = (function () {
       });
     } catch (e) {
       throw new Error(
-        'Không kết nối được máy chủ. Hãy chạy "node server.js" rồi mở http://localhost:3000',
+        'Không thể kết nối máy chủ dữ liệu. Vui lòng bật "node server.js" rồi thử lại.',
       );
     }
     let data = {};
@@ -60,10 +60,14 @@ const Store = (function () {
     } catch (e) {
       /* body rỗng */
     }
-    if (!res.ok)
-      throw new Error(
-        (data && data.msg) || "Lỗi máy chủ (" + res.status + ").",
-      );
+    if (!res.ok) {
+      const msg =
+        (data && data.msg) ||
+        "Không lấy được dữ liệu. Vui lòng thử lại sau.";
+      const err = new Error(msg);
+      err.status = res.status;
+      throw err;
+    }
     return data;
   }
 
@@ -77,12 +81,14 @@ const Store = (function () {
     customerReviews: [],
     groups: [],
     promos: [],
-    newsletters: [],
     reviews: [],
     siteReviews: [],
+    productToppings: [],
     settings: {},
     users: [],
     orders: [],
+    newsletters: [],
+    auditLogs: [],
     me: null,
   };
 
@@ -111,7 +117,7 @@ const Store = (function () {
     cache.customerReviews = boot.customerReviews || [];
     cache.groups = boot.groups || [];
     cache.promos = boot.promos || [];
-    cache.newsletters = boot.newsletters || [];
+    cache.productToppings = boot.productToppings || [];
     cache.reviews = boot.reviews;
     cache.siteReviews = boot.siteReviews;
 
@@ -123,39 +129,47 @@ const Store = (function () {
       cache.me = null;
     }
 
-    /* nếu là admin -> tải thêm danh sách users + orders */
+    /* nếu là admin -> tải thêm danh sách users + orders + newsletters + audit */
     if (cache.me && cache.me.role === "admin") {
       try {
         const admin = await api("GET", "/api/admin/data");
         cache.users = admin.users;
         cache.orders = admin.orders;
+        cache.newsletters = admin.newsletters || [];
+        cache.auditLogs = admin.auditLogs || [];
       } catch (e) {
         /* mất quyền giữa chừng -> bỏ qua */
       }
     }
-  }
-
-  function showOfflineNotice(msg) {
-    if (document.getElementById("offline-notice")) return;
-    const box = document.createElement("div");
-    box.id = "offline-notice";
-    box.style.cssText =
-      "position:fixed;inset:0;z-index:9999;background:rgba(43,35,24,.95);color:#FAF6EF;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px";
-    box.innerHTML =
-      '<div style="max-width:460px">' +
-      '<div style="font-size:3rem">&#9888;</div>' +
-      '<h2 style="margin:12px 0 8px;color:#F2C4A0">Không kết nối được máy chủ</h2>' +
-      '<p style="opacity:.9;line-height:1.6">' +
-      msg +
-      "</p>" +
-      "</div>";
-    document.body.appendChild(box);
+    /* nếu là staff -> tải đơn hàng (qua /api/staff/data) để làm việc */
+    if (cache.me && cache.me.role === "staff") {
+      try {
+        const staff = await api("GET", "/api/staff/data");
+        cache.orders = staff.orders;
+      } catch (e) {
+        /* bỏ qua */
+      }
+    }
   }
 
   /* Trang nào cũng phải `await Store.ready` trước khi đọc dữ liệu */
   const ready = init().catch((err) => {
-    console.error("[Store] Lỗi tải dữ liệu:", err.message);
-    showOfflineNotice(err.message);
+    console.warn("[Store] Không tải được dữ liệu:", err && err.message);
+    /* Banner nhỏ góc dưới — KHÔNG che màn hình, chỉ nhắc cách mở đúng.
+       Không hiện khi đã mở qua http://localhost:3000 (server chạy bình thường). */
+    try {
+      if (!location.protocol.startsWith("http")) {
+        const tip = document.createElement("div");
+        tip.id = "offline-tip";
+        tip.style.cssText =
+          "position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:9998;" +
+          "background:#2B2318;color:#FAF6EF;padding:10px 16px;border-radius:10px;" +
+          "font-size:.85rem;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:92vw;text-align:center;line-height:1.5";
+        tip.textContent =
+          "Bạn đang mở file trực tiếp nên không có dữ liệu. Hãy chạy 'node server.js' rồi mở http://localhost:3000";
+        document.body.appendChild(tip);
+      }
+    } catch (e) { /* bỏ qua */ }
     return "offline";
   });
 
@@ -249,6 +263,13 @@ const Store = (function () {
     cache.products = cache.products.filter((p) => p.id !== Number(id));
     cache.reviews = cache.reviews.filter((r) => r.productId !== Number(id));
   }
+  async function toggleAvailability(id, available) {
+    const data = await api("PATCH", "/api/products/" + Number(id) + "/availability", { is_available: !!available });
+    const saved = data.product;
+    const idx = cache.products.findIndex((p) => p.id === saved.id);
+    if (idx >= 0) cache.products[idx] = saved;
+    return saved;
+  }
 
   /* ---------- Người dùng / phiên đăng nhập ---------- */
   function getUsers() {
@@ -292,6 +313,16 @@ const Store = (function () {
         const admin = await api("GET", "/api/admin/data");
         cache.users = admin.users;
         cache.orders = admin.orders;
+        cache.newsletters = admin.newsletters || [];
+        cache.auditLogs = admin.auditLogs || [];
+      } catch (e) {
+        /* bỏ qua */
+      }
+    }
+    if (data.user.role === "staff") {
+      try {
+        const staff = await api("GET", "/api/staff/data");
+        cache.orders = staff.orders;
       } catch (e) {
         /* bỏ qua */
       }
@@ -306,14 +337,6 @@ const Store = (function () {
     return data.user;
   }
 
-  /* ---------- Đăng nhập Google chế độ demo (chưa cấu hình Client ID) ---------- */
-  async function googleLoginDemo(email, name) {
-    const data = await api("POST", "/api/google-login-demo", { email, name });
-    localStorage.setItem(KEYS.token, data.token);
-    cache.me = data.user;
-    return data.user;
-  }
-
   function logout() {
     const t = token();
     localStorage.removeItem(KEYS.token);
@@ -321,6 +344,11 @@ const Store = (function () {
     cache.users = [];
     cache.orders = [];
     if (t) api("POST", "/api/logout").catch(() => {});
+  }
+
+  async function changePassword({ oldPassword, newPassword }) {
+    const data = await api("POST", "/api/change-password", { oldPassword, newPassword });
+    return data;
   }
 
   async function updateProfile({ name, email, phone }) {
@@ -343,6 +371,7 @@ const Store = (function () {
         email: user.email,
         phone: user.phone,
         blocked: !!user.blocked,
+        role: user.role,
       },
     );
     const saved = data.user;
@@ -354,6 +383,41 @@ const Store = (function () {
   async function deleteUser(id) {
     await api("DELETE", "/api/users/" + encodeURIComponent(id));
     cache.users = cache.users.filter((u) => u.id !== id);
+  }
+
+  /* ---------- Vai trò ---------- */
+  function isStaff() {
+    return !!cache.me && (cache.me.role === "staff" || cache.me.role === "admin");
+  }
+
+  /* ---------- Upload ảnh an toàn (PHASE 10) ---------- */
+  async function uploadImage(dataUrl, kind) {
+    const data = await api("POST", "/api/upload", { dataUrl, kind: kind || "product" });
+    return data.url;
+  }
+
+  /* ---------- Topping thuộc sản phẩm (PHASE 9) ---------- */
+  function productToppingIds(productId) {
+    return cache.productToppings
+      .filter((x) => Number(x.product_id) === Number(productId))
+      .map((x) => x.topping_id);
+  }
+  function getProductToppings(productId) {
+    const ids = productToppingIds(productId);
+    return cache.toppings.filter((t) => ids.includes(t.id));
+  }
+  async function saveProductToppings(productId, toppingIds) {
+    await api("POST", "/api/product-toppings", { product_id: productId, toppings: toppingIds });
+    cache.productToppings = cache.productToppings.filter((x) => Number(x.product_id) !== Number(productId));
+    (toppingIds || []).forEach((tid) => cache.productToppings.push({ product_id: productId, topping_id: tid }));
+  }
+
+  /* ---------- Hủy đơn (PHASE 22) ---------- */
+  async function cancelOrder(code, reason) {
+    const data = await api("POST", "/api/orders/" + encodeURIComponent(code) + "/cancel", { reason: reason || "" });
+    const idx = cache.orders.findIndex((o) => o.code === code);
+    if (idx >= 0) cache.orders[idx] = data.order;
+    return data.order;
   }
 
   /* ---------- Đơn hàng ---------- */
@@ -397,6 +461,17 @@ const Store = (function () {
   async function updateOrderStatus(code, status) {
     const data = await api("PATCH", "/api/orders/" + encodeURIComponent(code), {
       status,
+    });
+    const idx = cache.orders.findIndex((o) => o.code === code);
+    if (idx >= 0) cache.orders[idx] = data.order;
+    return data.order;
+  }
+  async function setOrderStatus(code, status) {
+    return updateOrderStatus(code, status);
+  }
+  async function setOrderPayment(code, payment_status) {
+    const data = await api("PATCH", "/api/orders/" + encodeURIComponent(code), {
+      payment_status,
     });
     const idx = cache.orders.findIndex((o) => o.code === code);
     if (idx >= 0) cache.orders[idx] = data.order;
@@ -461,6 +536,19 @@ const Store = (function () {
     const data = await api("DELETE", "/api/site-reviews/" + Number(id));
     cache.siteReviews = cache.siteReviews.filter((r) => r.id !== Number(id));
     return data;
+  }
+  /* Duyệt/ẩn đánh giá (admin — PHASE 17) */
+  async function modReview(id, status) {
+    const data = await api("PATCH", "/api/reviews/" + Number(id) + "/status", { status });
+    const idx = cache.reviews.findIndex((r) => r.id === Number(id));
+    if (idx >= 0) cache.reviews[idx] = data.review;
+    return data.review;
+  }
+  async function modSiteReview(id, status) {
+    const data = await api("PATCH", "/api/site-reviews/" + Number(id) + "/status", { status });
+    const idx = cache.siteReviews.findIndex((r) => r.id === Number(id));
+    if (idx >= 0) cache.siteReviews[idx] = data.review;
+    return data.review;
   }
 
   /* ---------- Topping ---------- */
@@ -600,6 +688,9 @@ const Store = (function () {
     cache.newsletters = cache.newsletters.filter((n) => n.id !== Number(id));
   }
 
+  /* ---------- Nhật ký truy vết (audit) ---------- */
+  function getAuditLogs() { return cache.auditLogs.slice(); }
+
   /* ---------- API công khai ---------- */
   return {
     KEYS,
@@ -608,6 +699,7 @@ const Store = (function () {
     getProduct,
     saveProduct,
     deleteProduct,
+    toggleAvailability,
     nextProductId,
     getUsers,
     findByUsername,
@@ -615,9 +707,9 @@ const Store = (function () {
     register,
     login,
     googleLogin,
-    googleLoginDemo,
     logout,
     updateProfile,
+    changePassword,
     myOrders,
     currentUser,
     isLoggedIn,
@@ -644,6 +736,8 @@ const Store = (function () {
     addSiteReview,
     deleteReview,
     deleteSiteReview,
+    modReview,
+    modSiteReview,
     getToppings,
     saveTopping,
     deleteTopping,
@@ -671,5 +765,13 @@ const Store = (function () {
     getNewsletters,
     addNewsletter,
     deleteNewsletter,
+    getAuditLogs,
+    isStaff,
+    uploadImage,
+    getProductToppings,
+    saveProductToppings,
+    cancelOrder,
+    setOrderStatus,
+    setOrderPayment,
   };
 })();

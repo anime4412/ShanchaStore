@@ -31,6 +31,11 @@ const Cart = (function () {
   function add(productId, qty, toppings) {
     const p = Store.getProduct(productId);
     if (!p) return false;
+    /* Chặn: sản phẩm đã tắt bán (hết hàng) thì không thêm vào giỏ được */
+    if (p.is_available === false) {
+      UI.toast('Sản phẩm "' + p.name + '" đang hết hàng, không thể đặt.', 'warn');
+      return false;
+    }
     const ids = (toppings || []).map(t => t.id);
     const chosen = Store.getToppings().filter(t => ids.includes(t.id));
     Store.addToCart(p, qty || 1, chosen);
@@ -116,11 +121,9 @@ const Cart = (function () {
     if (btn) btn.addEventListener('click', checkout);
   }
 
-  /* ---------- Ảnh trong giỏ: base64/link trực tiếp, còn lại qua assets/ ---------- */
+  /* ---------- Ảnh trong giỏ: base64/link trực tiếp/uploads, còn lại qua assets/ ---------- */
   function imgSrc(it) {
-    if (!it.img) return 'assets/images/logo.svg';
-    if (it.img.indexOf('data:') === 0 || it.img.indexOf('http') === 0) return it.img;
-    return 'assets/images/' + it.img;
+    return UI.assetUrl(it.img);
   }
 
   /* ---------- Popup chọn/chỉnh topping ---------- */
@@ -153,7 +156,7 @@ const Cart = (function () {
       '<h2 class="modal-name">' + UI.esc(product.name) + '</h2>' +
       '<div class="modal-price"><span class="price-now">' + UI.fmt(product.price) + '</span></div>' +
       '<div class="modal-toppings"><h4>Topping</h4>' +
-      Store.getToppings().map(t => {
+      Store.getProductToppings(product.id).map(t => {
         const on = current.some(c => c.id === t.id);
         return '<label class="topping"><input type="checkbox" value="' + t.id + '"' + (on ? ' checked' : '') + '> ' + t.name + ' (+' + UI.fmt(t.price) + ')</label>';
       }).join('') +

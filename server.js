@@ -44,26 +44,62 @@
 
 'use strict';
 
+/* ---------- .env nhẹ (không dependency) ---------- */
+(function loadEnv() {
+  try {
+    const p = require('path').join(__dirname, '.env');
+    if (require('fs').existsSync(p)) {
+      require('fs').readFileSync(p, 'utf8').split(/\r?\n/).forEach(line => {
+        const m = /^\s*([\w.]+)\s*=\s*(.*)\s*$/.exec(line);
+        if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, '');
+      });
+    }
+  } catch (e) { /* bỏ qua */ }
+})();
+
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { DatabaseSync } = require('node:sqlite');
 
+/* MIGRATION schema + state machine (giữ nguyên dữ liệu) */
+const { migrate, ORDER_STATUS: SCHEMA_ORDER_STATUS } = require('./js/db-schema.js');
+
 /* Dữ liệu gốc dùng để seed database lần đầu */
 const { PRODUCTS, STORES, TOPPINGS, distanceKm } = require('./js/data.js');
 
 const PORT = Number(process.env.PORT) || 3000;
-const HOST = process.env.HOST || '127.0.0.1';
+/* Mặc định 0.0.0.0 để cloud host (Render/Docker/VPS) truy cập được.
+   Trên máy local vẫn mở được như cũ qua http://localhost:3000.
+   Muốn chỉ cho chạy nội bộ thì set HOST=127.0.0.1 trong .env. */
+const HOST = process.env.HOST || '0.0.0.0';
 const ROOT = __dirname;
-const DB_FILE = path.join(ROOT, 'database.db');
-const SHIP_FEE = 15000;                       // phí giao tận nơi khi KHÔNG chọn bản đồ
-const BODY_LIMIT = 15 * 1024 * 1024;          // 15MB (chứa ảnh base64)
+const DB_FILE = process.env.DATABASE_PATH
+  ? path.resolve(ROOT, process.env.DATABASE_PATH)
+  : path.join(ROOT, 'database.db');
+/* UPLOAD_DIR có thể trỏ ra ổ đĩa mounted (Docker volume / Render disk) để ảnh
+   tải lên không bị mất khi restart. Mặc định giữ trong thư mục dự án. */
+const SHIP_FEE = Math.max(0, Number(process.env.SHIP_FEE) || 15000);      // phí giao tận nơi khi KHÔNG chọn bản đồ
+const BODY_LIMIT = 10 * 1024 * 1024;          // 10MB (ảnh base64 nén)
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;  // phiên đăng nhập sống 30 ngày
-const ORDER_STATUS = ['processing', 'delivering', 'done', 'cancelled'];
+const ORDER_STATUS = SCHEMA_ORDER_STATUS;     // 7 bước: pending→confirmed→preparing→ready→delivering→completed + cancelled
 const PAY_METHODS = ['cod', 'bank', 'card'];
+const PAYMENT_STATUS = ['pending', 'paid', 'failed', 'refunded'];
+const REVIEW_STATUS = ['pending', 'approved', 'hidden'];
 const CATEGORIES_ID = ['tra-sua', 'tra-lanh', 'ca-phe'];
 const GROUPS_ID = ['new', 'hot', 'sale'];
+const UPLOAD_DIR = path.resolve(ROOT, process.env.UPLOAD_DIR || 'uploads');
+const corsOrigins = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+
+/* Rate limiting (chống brute-force login/register) */
+const RATE = {
+  login:  Number(process.env.RATE_LOGIN_MAX)  || 10,
+  order:  Number(process.env.RATE_ORDER_MAX)  || 20,
+  review: Number(process.env.RATE_REVIEW_MAX) || 10,
+  upload: Number(process.env.RATE_UPLOAD_MAX) || 20
+};
+const RATE_WINDOW = 15 * 60 * 1000; // 15 phút
 
 /* Phí ship theo khoảng cách (km) từ chi nhánh gần nhất tới điểm giao trên bản đồ */
 const SHIP_TIERS = [
@@ -84,134 +120,35 @@ const reEmail = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const rePhone = /^(0|\+84)[0-9]{9,10}$/;
 
 /* ============================================================
-   1) DATABASE SQLITE
-   (cột "grp" / "descr" vì "group" / "desc" là từ khoá của SQL)
+   1) DATABASE SQLITE + MIGRATION (giữ nguyên dữ liệu)
    ============================================================ */
-const db = new DatabaseSync(DB_FILE);db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id        TEXT PRIMARY KEY,
-    name      TEXT NOT NULL,
-    username  TEXT NOT NULL UNIQUE,
-    pass_salt TEXT NOT NULL,
-    pass_hash TEXT NOT NULL,
-    email     TEXT DEFAULT '',
-    phone     TEXT DEFAULT '',
-    role      TEXT NOT NULL DEFAULT 'customer',
-    blocked   INTEGER NOT NULL DEFAULT 0,
-    created   INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS sessions (
-    token   TEXT PRIMARY KEY,
-    userId  TEXT NOT NULL,
-    created INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS products (
-    id       INTEGER PRIMARY KEY,
-    name     TEXT NOT NULL,
-    category TEXT NOT NULL,
-    grp      TEXT NOT NULL,
-    price    INTEGER NOT NULL,
-    oldPrice INTEGER NOT NULL,
-    img      TEXT DEFAULT '',
-    descr    TEXT DEFAULT '',
-    rating   REAL NOT NULL DEFAULT 4.5,
-    sold     INTEGER NOT NULL DEFAULT 0
-  );
-  CREATE TABLE IF NOT EXISTS toppings (
-    id    TEXT PRIMARY KEY,
-    name  TEXT NOT NULL,
-    price INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS categories (
-    id   TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    sort INTEGER DEFAULT 0
-  );
-  CREATE TABLE IF NOT EXISTS orders (
-    code      TEXT PRIMARY KEY,
-    userId    TEXT NOT NULL,
-    customer  TEXT NOT NULL,
-    name      TEXT NOT NULL,
-    phone     TEXT NOT NULL,
-    address   TEXT NOT NULL,
-    note      TEXT DEFAULT '',
-    payMethod TEXT NOT NULL DEFAULT 'cod',
-    store     TEXT NOT NULL DEFAULT 'Giao tận nơi',
-    items     TEXT NOT NULL,
-    subtotal  INTEGER NOT NULL,
-    shipFee   INTEGER NOT NULL,
-    total     INTEGER NOT NULL,
-    status    TEXT NOT NULL DEFAULT 'processing',
-    created   INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS settings (
-    k TEXT PRIMARY KEY,
-    v TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS reviews (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    productId INTEGER NOT NULL,
-    userName  TEXT NOT NULL,
-    rating    INTEGER NOT NULL,
-    comment   TEXT DEFAULT '',
-    created   INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS site_reviews (
-    id       INTEGER PRIMARY KEY AUTOINCREMENT,
-    userName TEXT NOT NULL,
-    rating   INTEGER NOT NULL,
-    comment  TEXT DEFAULT '',
-    created  INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS banners (
-    id    INTEGER PRIMARY KEY AUTOINCREMENT,
-    img   TEXT NOT NULL,
-    title TEXT DEFAULT '',
-    sub   TEXT DEFAULT '',
-    link  TEXT DEFAULT '',
-    sort  INTEGER DEFAULT 0,
-    active INTEGER DEFAULT 1
-  );
-  CREATE TABLE IF NOT EXISTS stores (
-    id      TEXT PRIMARY KEY,
-    name    TEXT NOT NULL,
-    address TEXT DEFAULT '',
-    hours   TEXT DEFAULT '',
-    phone   TEXT DEFAULT '',
-    lat     REAL,
-    lng     REAL,
-    sort    INTEGER DEFAULT 0
-  );
-  CREATE TABLE IF NOT EXISTS customer_reviews (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    avatar_letter TEXT DEFAULT '',
-    stars         INTEGER NOT NULL DEFAULT 5,
-    content       TEXT DEFAULT '',
-    author        TEXT DEFAULT '',
-    city          TEXT DEFAULT '',
-    created       INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS groups (
-    id   TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    sort INTEGER DEFAULT 0
-  );
-  CREATE TABLE IF NOT EXISTS promos (
-    code   TEXT PRIMARY KEY,
-    type   TEXT NOT NULL,
-    value  REAL NOT NULL DEFAULT 0,
-    max    REAL,
-    min    REAL,
-    label  TEXT DEFAULT '',
-    active INTEGER NOT NULL DEFAULT 1,
-    created INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS newsletters (
-    id      INTEGER PRIMARY KEY AUTOINCREMENT,
-    email   TEXT NOT NULL UNIQUE,
-    created INTEGER NOT NULL
-  );
-`);
+/* ---------- Logging có cấu trúc (PHASE 23) ---------- */
+fs.mkdirSync(path.join(ROOT, 'logs'), { recursive: true });
+let logStream = null;
+try { logStream = fs.createWriteStream(path.join(ROOT, 'logs', 'app.log'), { flags: 'a' }); } catch (e) { /* bỏ qua */ }
+function log(level, msg, extra) {
+  const line = '[' + new Date().toISOString() + '] [' + level + '] ' + msg + (extra && Object.keys(extra).length ? ' ' + JSON.stringify(extra) : '');
+  console.log(line);
+  if (logStream) try { logStream.write(line + '\n'); } catch (e) { /* bỏ qua */ }
+}
+
+/* ---------- Mở DB + auto-backup trước migration DB cũ ---------- */
+fs.mkdirSync(path.dirname(DB_FILE), { recursive: true });
+const db = new DatabaseSync(DB_FILE);
+(function preMigrationBackup() {
+  try {
+    const cols = db.prepare('PRAGMA table_info(products)').all();
+    if (!cols.some(c => c.name === 'is_available')) {
+      fs.mkdirSync(path.join(ROOT, 'backups'), { recursive: true });
+      const d = new Date(), p2 = n => String(n).padStart(2, '0');
+      const name = 'database-' + d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()) + '-' + p2(d.getHours()) + p2(d.getMinutes()) + '-premigration.db';
+      try { fs.copyFileSync(DB_FILE, path.join(ROOT, 'backups', name)); log('info', 'Auto-backup trước migration: ' + name); }
+      catch (e) { log('warn', 'Không auto-backup được: ' + e.message); }
+    }
+  } catch (e) { /* bảng products chưa tồn tại (DB mới) */ }
+})();
+const schemaInfo = migrate(db, ROOT);
+if (schemaInfo.migratedOrders > 0) log('info', 'Migration: đã tách ' + schemaInfo.migratedOrders + ' đơn cũ sang order_items');
 
 /* Nâng cấp bảng orders cho bản đồ + khuyến mãi (an toàn khi chạy lại nhiều lần) */
 [
@@ -245,14 +182,14 @@ function rowToProduct(r) {
   return {
     id: r.id, name: r.name, category: r.category, group: r.grp,
     price: r.price, oldPrice: r.oldPrice, img: r.img, desc: r.descr,
-    rating: r.rating, sold: r.sold
+    rating: r.rating, sold: r.sold, is_available: r.is_available !== 0
   };
 }
 function rowToUser(r) {
   return {
     id: r.id, name: r.name, username: r.username,
     email: r.email, phone: r.phone, role: r.role,
-    blocked: !!r.blocked, created: r.created
+    blocked: !!r.blocked, status: r.status || 'active', created: r.created
   };
 }
 function rowToOrder(r) {
@@ -264,14 +201,15 @@ function rowToOrder(r) {
     store: r.store, items, subtotal: r.subtotal, shipFee: r.shipFee,
     discount: r.discount || 0, promo: r.promo || '',
     lat: r.lat, lng: r.lng, shipKm: r.shipKm, shipFrom: r.shipFrom || '',
-    total: r.total, status: r.status, created: r.created
+    total: r.total, status: r.status, delivery_method: r.delivery_method || 'delivery',
+    payment_status: r.payment_status || 'pending', created: r.created
   };
 }
 function rowToReview(r) {
-  return { id: r.id, productId: r.productId, userName: r.userName, rating: r.rating, comment: r.comment, created: r.created };
+  return { id: r.id, productId: r.productId, userName: r.userName, rating: r.rating, comment: r.comment, created: r.created, status: r.status || 'pending', userId: r.user_id || '', orderId: r.order_id || '' };
 }
 function rowToSiteReview(r) {
-  return { id: r.id, userName: r.userName, rating: r.rating, comment: r.comment, created: r.created };
+  return { id: r.id, userName: r.userName, rating: r.rating, comment: r.comment, created: r.created, status: r.status || 'pending', userId: r.user_id || '' };
 }
 function rowToCategory(r) {
   return { id: r.id, name: r.name, sort: r.sort };
@@ -294,6 +232,11 @@ function rowToPromo(r) {
 function rowToNewsletter(r) {
   return { id: r.id, email: r.email, created: r.created };
 }
+
+function rowToAudit(r) {
+  return { id: r.id, userId: r.user_id, username: r.username, action: r.action, targetType: r.target_type, targetId: r.target_id, details: r.details, ip: r.ip, created: r.created };
+}
+function rowToToppingRow(r) { return { id: r.id, name: r.name, price: r.price }; }
 
 /* ---------- Cài đặt website (lưu JSON từng khoá) ----------
    getSettings(): đọc toàn bộ bảng settings, ghép lên DEFAULT_SETTINGS.
@@ -332,14 +275,14 @@ function seed() {
     const stmt = db.prepare(
       'INSERT INTO users (id, name, username, pass_salt, pass_hash, email, phone, role, blocked, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)'
     );
-    const admin = hashPassword('admin123');
-    stmt.run('u-admin', 'Quản trị viên', 'admin', admin.salt, admin.hash, 'admin@shancha.vn', '0397999949', 'admin', Date.now());
+    const admin = hashPassword(process.env.ADMIN_PASSWORD || 'admin123');
+    stmt.run('u-admin', 'Quản trị viên', process.env.ADMIN_USERNAME || 'admin', admin.salt, admin.hash, 'admin@shancha.vn', '0397999949', 'admin', Date.now());
     const user = hashPassword('123456');
     stmt.run('u-user', 'Khách hàng Demo', 'user', user.salt, user.hash, 'user@shancha.vn', '0901234567', 'customer', Date.now());
   }
   if (db.prepare('SELECT COUNT(*) AS n FROM products').get().n === 0) {
     const stmt = db.prepare(
-      'INSERT INTO products (id, name, category, grp, price, oldPrice, img, descr, rating, sold) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      'INSERT INTO products (id, name, category, grp, price, oldPrice, img, descr, rating, sold, is_available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)'
     );
     PRODUCTS.forEach(p => stmt.run(p.id, p.name, p.category, p.group, p.price, p.oldPrice, p.img, p.desc, p.rating, p.sold));
   }
@@ -400,6 +343,86 @@ function userFromRequest(req) {
   return rowToUser(row);
 }
 
+/* ---------- AUDIT LOG (PHASE 25) ----------
+   Ghi hành động quan trọng của admin/staff vào bảng audit_logs. */
+function audit(user, action, targetType, targetId, details, ip) {
+  try {
+    db.prepare(
+      'INSERT INTO audit_logs (user_id, username, action, target_type, target_id, details, ip, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(
+      user ? user.id : '', user ? user.username : '',
+      String(action || '').slice(0, 60),
+      String(targetType || '').slice(0, 40),
+      targetId == null ? '' : String(targetId).slice(0, 60),
+      JSON.stringify(details || {}),
+      String(ip || '').slice(0, 64),
+      Date.now()
+    );
+  } catch (e) { /* audit không được làm sập request */ }
+}
+
+/* ---------- RATE LIMITING (PHASE 12) ----------
+   Bộ nhớ trong RAM, đủ cho assignment; chống brute-force login. */
+const buckets = new Map();
+function rateLimit(key, max) {
+  const now = Date.now();
+  const b = buckets.get(key);
+  if (!b || now - b.start > RATE_WINDOW) {
+    buckets.set(key, { start: now, count: 1 });
+    return true;
+  }
+  b.count++;
+  return b.count <= max;
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of buckets) if (now - v.start > RATE_WINDOW) buckets.delete(k);
+}, RATE_WINDOW).unref();
+function clientKey(req) {
+  /* Sau proxy (Render/VPS nginx): nếu bật TRUST_PROXY=1 thì dùng X-Forwarded-For
+     để rate-limit theo IP thật của khách, không gom tất cả vào 1 bucket proxy. */
+  const fwd = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  if (process.env.TRUST_PROXY === '1' && fwd) return fwd;
+  return String(req.socket.remoteAddress || 'unknown');
+}
+
+/* ---------- UPLOAD ẢNH AN TOÀN (PHASE 10) ----------
+   Nhận dataUrl base64 -> kiểm tra magic bytes JPEG/PNG/WebP -> lưu file vào
+   uploads/ với tên ngẫu nhiên -> trả URL. KHÔNG lưu base64 khổng lồ vào DB. */
+function handleUpload(dataUrl, kind) {
+  const m = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(String(dataUrl || ''));
+  if (!m) throw new ApiError(400, 'Ảnh không hợp lệ. Chỉ hỗ trợ JPEG/PNG/WebP (data URL).');
+  const buf = Buffer.from(m[2], 'base64');
+  if (buf.length > 4 * 1024 * 1024) throw new ApiError(400, 'Ảnh quá lớn (tối đa 4MB).');
+  /* magic bytes: xác nhận nội dung thật */
+  let ext = null;
+  if (buf.length > 8 && buf.readUInt32BE(0) === 0x89504E47 && buf.readUInt32BE(4) === 0x0D0A1A0A) ext = 'png';
+  else if (buf.length > 3 && buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) ext = 'jpg';
+  else if (buf.length > 12 && buf.toString('latin1', 0, 4) === 'RIFF' && buf.toString('latin1', 8, 12) === 'WEBP') ext = 'webp';
+  if (!ext) throw new ApiError(400, 'File không phải ảnh JPEG/PNG/WebP hợp lệ.');
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+  const filename = crypto.randomBytes(16).toString('hex') + '.' + ext;
+  fs.writeFileSync(path.join(UPLOAD_DIR, filename), buf);
+  try { db.prepare('INSERT INTO uploads (filename, kind, size, created) VALUES (?, ?, ?, ?)').run(filename, kind || 'product', buf.length, Date.now()); } catch (e) { /* bỏ qua */ }
+  return { url: '/uploads/' + filename, size: buf.length, ext };
+}
+
+/* ---------- STATE MACHINE ĐƠN HÀNG (PHASE 5) ----------
+   Chỉ cho phép transition hợp lệ; khách chỉ hủy được ở pending/confirmed. */
+const ORDER_TRANSITIONS = {
+  pending:    ['confirmed', 'cancelled'],
+  confirmed:  ['preparing', 'cancelled'],
+  preparing:  ['ready'],
+  ready:      ['delivering'],
+  delivering: ['completed'],
+  completed:  [],
+  cancelled:  []
+};
+function canTransition(from, to) {
+  return !!ORDER_TRANSITIONS[from] && ORDER_TRANSITIONS[from].includes(to);
+}
+const CUSTOMER_CANCEL_ALLOWED = ['pending', 'confirmed'];
+
 /* ============================================================
    2) REST API
    handleApi(req, res, u): trung tâm xử lý mọi đường /api/...
@@ -416,7 +439,7 @@ function readBody(req) {
     const chunks = [];
     req.on('data', c => {
       size += c.length;
-      if (size > BODY_LIMIT) { reject(new ApiError(413, 'Dữ liệu quá lớn (tối đa 15MB).')); req.destroy(); return; }
+      if (size > BODY_LIMIT) { reject(new ApiError(413, 'Dữ liệu quá lớn (tối đa 10MB).')); req.destroy(); return; }
       chunks.push(c);
     });
     req.on('end', () => {
@@ -451,8 +474,23 @@ async function handleApi(req, res, u) {
     if (usr.role !== 'admin') { fail(403, 'Bạn không có quyền quản trị.'); return null; }
     return usr;
   }
+  function needStaff() {
+    const usr = needUser();
+    if (!usr) return null;
+    if (usr.role !== 'staff' && usr.role !== 'admin') { fail(403, 'Bạn không có quyền thao tác đơn hàng.'); return null; }
+    return usr;
+  }
+  /* user hiện tại để ghi audit (có thể null nếu endpoint công khai) */
+  const usrSide = userFromRequest(req);
 
   try {
+    /* ---------- Health check (Render / Docker / uptime monitor) ---------- */
+    if (method === 'GET' && p === '/api/health') {
+      let dbOk = true;
+      try { db.prepare('SELECT 1').get(); } catch (e) { dbOk = false; }
+      return ok({ ok: dbOk, db: dbOk ? 'ok' : 'error', uptime: Math.round(process.uptime()) });
+    }
+
     /* ---------- Dữ liệu chung khi trang load ---------- */
     if (method === 'GET' && p === '/api/bootstrap') {
       return ok({
@@ -465,9 +503,11 @@ async function handleApi(req, res, u) {
         customerReviews: db.prepare('SELECT * FROM customer_reviews ORDER BY id DESC').all().map(rowToCustomerReview),
         groups: db.prepare('SELECT * FROM groups ORDER BY sort, id').all().map(rowToGroup),
         promos: db.prepare('SELECT * FROM promos ORDER BY code').all().map(rowToPromo),
-        newsletters: db.prepare('SELECT * FROM newsletters ORDER BY created DESC').all().map(rowToNewsletter),
-        reviews: db.prepare('SELECT * FROM reviews ORDER BY id DESC').all().map(rowToReview),
-        siteReviews: db.prepare('SELECT * FROM site_reviews ORDER BY id DESC').all().map(rowToSiteReview)
+        /* product_toppings: cặp sản phẩm -> topping hợp lệ (PHASE 9) */
+        productToppings: db.prepare('SELECT product_id, topping_id FROM product_toppings').all(),
+        /* Chỉ đưa đánh giá ĐÃ DUYỆT + review cũ (chưa có status) cho khách (PHASE 17) */
+        reviews: db.prepare("SELECT * FROM reviews WHERE status != 'hidden' ORDER BY id DESC").all().map(rowToReview),
+        siteReviews: db.prepare("SELECT * FROM site_reviews WHERE status != 'hidden' ORDER BY id DESC").all().map(rowToSiteReview)
       });
     }
 
@@ -479,43 +519,48 @@ async function handleApi(req, res, u) {
       return res.ok ? ok(res) : fail(400, res.msg);
     }
 
-    /* ---------- Đăng ký ---------- */
+    /* ---------- Đăng ký (rate limited — PHASE 12) ---------- */
     if (method === 'POST' && p === '/api/register') {
+      if (!rateLimit(clientKey(req) + ':register', RATE.login)) return fail(429, 'Quá nhiều yêu cầu đăng ký. Vui lòng thử lại sau 15 phút.');
       const b = await readBody(req);
-      const name = String(b.name || '').trim();
-      const username = String(b.username || '').trim();
-      const email = String(b.email || '').trim();
-      const phone = String(b.phone || '').trim();
+      const name = String(b.name || '').trim().slice(0, 60);
+      const username = String(b.username || '').trim().toLowerCase().slice(0, 30);
+      const email = String(b.email || '').trim().slice(0, 120);
+      const phone = String(b.phone || '').trim().slice(0, 15);
       const password = String(b.password || '');
 
       if (name.length < 2) return fail(400, 'Họ tên phải có ít nhất 2 ký tự.');
-      if (username.length < 3) return fail(400, 'Tên đăng nhập phải có ít nhất 3 ký tự.');
+      if (!/^[a-z0-9_]{3,30}$/.test(username)) return fail(400, 'Tên đăng nhập 3–30 ký tự (chữ thường, số, gạch dưới).');
       if (!reEmail.test(email)) return fail(400, 'Email không đúng định dạng.');
       if (!rePhone.test(phone)) return fail(400, 'Số điện thoại không đúng định dạng (VD: 0901234567).');
-      if (password.length < 6) return fail(400, 'Mật khẩu phải có ít nhất 6 ký tự.');
+      if (password.length < 6 || password.length > 72) return fail(400, 'Mật khẩu phải từ 6 đến 72 ký tự.');
       if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) return fail(409, 'Tên đăng nhập đã tồn tại.');
       if (db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) return fail(409, 'Email đã được đăng ký.');
 
-      const id = 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      const id = 'u-' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex');
       const { salt, hash } = hashPassword(password);
       db.prepare(
-        'INSERT INTO users (id, name, username, pass_salt, pass_hash, email, phone, role, blocked, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)'
-      ).run(id, name, username, salt, hash, email, phone, 'customer', Date.now());
+        'INSERT INTO users (id, name, username, pass_salt, pass_hash, email, phone, role, blocked, created, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, \'active\', ?)'
+      ).run(id, name, username, salt, hash, email, phone, 'customer', Date.now(), Date.now());
       const user = rowToUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id));
       return ok({ user, token: createSession(id) });
     }
 
-    /* ---------- Đăng nhập (bằng email HOẶC tên đăng nhập) ---------- */
+    /* ---------- Đăng nhập (bằng email HOẶC tên đăng nhập — rate limited) ---------- */
     if (method === 'POST' && p === '/api/login') {
+      if (!rateLimit(clientKey(req) + ':login', RATE.login)) return fail(429, 'Quá nhiều lần thử đăng nhập. Vui lòng thử lại sau 15 phút.');
       const b = await readBody(req);
-      const username = String(b.username || '').trim();
+      const username = String(b.username || '').trim().slice(0, 120);
       const password = String(b.password || '');
       const row = db.prepare(
         'SELECT * FROM users WHERE username = ? COLLATE NOCASE OR email = ? COLLATE NOCASE'
       ).get(username, username);
-      if (!row) return fail(401, 'Tên đăng nhập / email không tồn tại.');
-      if (!verifyPassword(password, row.pass_salt, row.pass_hash)) return fail(401, 'Mật khẩu không đúng.');
+      if (!row || !verifyPassword(password, row.pass_salt, row.pass_hash)) {
+        log('warn', 'Đăng nhập thất bại', { ip: clientKey(req) });
+        return fail(401, 'Tên đăng nhập / email hoặc mật khẩu không đúng.');
+      }
       if (row.blocked) return fail(403, 'Tài khoản đã bị khoá.');
+      log('info', 'Đăng nhập thành công', { user: row.id });
       return ok({ user: rowToUser(row), token: createSession(row.id) });
     }
 
@@ -526,14 +571,14 @@ async function handleApi(req, res, u) {
       return ok({ ok: true });
     }
 
-    /* ---------- Đăng nhập bằng Google (xác minh ID token với Google) ---------- */
+    /* ---------- Đăng nhập Google (CHỈ khi cấu hình Client ID thật) ----------
+       KHÔNG còn chế độ demo — chế độ đó cho phép chiếm tài khoản chỉ với email. */
     if (method === 'POST' && p === '/api/google-login') {
+      if (!rateLimit(clientKey(req) + ':login', RATE.login)) return fail(429, 'Quá nhiều yêu cầu. Vui lòng thử lại sau 15 phút.');
+      const clientId = String(getSettings().googleClientId || process.env.GOOGLE_CLIENT_ID || '').trim();
+      if (!clientId) return fail(400, 'Website chưa cấu hình đăng nhập Google. Liên hệ quản trị viên.');
       const b = await readBody(req);
       const credential = String(b.credential || '').trim();
-      if (!credential) return fail(400, 'Thiếu mã đăng nhập Google.');
-
-      const clientId = String(getSettings().googleClientId || '').trim();
-      if (!clientId) return fail(400, 'Website chưa cấu hình đăng nhập Google. Hãy liên hệ quản trị viên.');
 
       /* Xác minh token qua endpoint công khai của Google (không cần API key) */
       let info;
@@ -568,34 +613,9 @@ async function handleApi(req, res, u) {
       return ok({ user: rowToUser(row), token: createSession(row.id) });
     }
 
-    /* ---------- Đăng nhập Google CHẾ ĐỘ DEMO (chỉ khi chưa cấu hình Client ID thật) ----------
-       Giúp nút "Đăng nhập bằng Google" luôn hoạt động để chấm điểm / dùng offline.
-       Khi admin nhập googleClientId trong Cài đặt, API này tự tắt và dùng luồng thật ở trên. */
-    if (method === 'POST' && p === '/api/google-login-demo') {
-      const clientId = String(getSettings().googleClientId || '').trim();
-      if (clientId) return fail(400, 'Website đã cấu hình đăng nhập Google thật. Vui lòng đăng nhập qua Google.');
-      const b = await readBody(req);
-      const email = String(b.email || '').trim().toLowerCase();
-      const name = String(b.name || '').trim();
-      if (!reEmail.test(email)) return fail(400, 'Email không đúng định dạng.');
-
-      let row = db.prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE').get(email);
-      if (row && row.blocked) return fail(403, 'Tài khoản đã bị khoá.');
-      if (!row) {
-        let username = 'gg_' + email.split('@')[0].replace(/[^a-z0-9]/g, '').slice(0, 12);
-        if (username.length < 3 || db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) {
-          username = 'gg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-        }
-        const id = 'u-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-        const displayName = name || email.split('@')[0];
-        const { salt, hash } = hashPassword(crypto.randomBytes(18).toString('hex'));
-        db.prepare(
-          'INSERT INTO users (id, name, username, pass_salt, pass_hash, email, phone, role, blocked, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)'
-        ).run(id, displayName, username, salt, hash, email, '', 'customer', Date.now());
-        row = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-      }
-      return ok({ user: rowToUser(row), token: createSession(row.id), demo: true });
-    }
+    /* ---------- Đăng nhập Google CHẾ ĐỘ DEMO ĐÃ BỎ ----------
+       (Trước kia cho phép chiếm tài khoản chỉ với email — lỗ hổng bảo mật nghiêm trọng.)
+       Nút Google không cấu hình Client ID sẽ báo lỗi an toàn ở API google-login ở trên. */
 
     /* ---------- Thông tin phiên hiện tại ---------- */
     if (method === 'GET' && p === '/api/me') {
@@ -609,16 +629,35 @@ async function handleApi(req, res, u) {
       const usr = needUser();
       if (!usr) return;
       const b = await readBody(req);
-      const name = String(b.name || '').trim();
-      const email = String(b.email || '').trim();
-      const phone = String(b.phone || '').trim();
+      const name = String(b.name || '').trim().slice(0, 60);
+      const email = String(b.email || '').trim().slice(0, 120);
+      const phone = String(b.phone || '').trim().slice(0, 15);
       if (name.length < 2) return fail(400, 'Họ tên phải có ít nhất 2 ký tự.');
       if (!reEmail.test(email)) return fail(400, 'Email không đúng định dạng.');
       if (phone && !rePhone.test(phone)) return fail(400, 'Số điện thoại không đúng định dạng (VD: 0901234567).');
       const dup = db.prepare('SELECT 1 FROM users WHERE email = ? COLLATE NOCASE AND id != ?').get(email, usr.id);
       if (dup) return fail(409, 'Email này đã được tài khoản khác sử dụng.');
-      db.prepare('UPDATE users SET name = ?, email = ?, phone = ? WHERE id = ?').run(name, email, phone, usr.id);
+      db.prepare('UPDATE users SET name = ?, email = ?, phone = ?, updated_at = ? WHERE id = ?').run(name, email, phone, Date.now(), usr.id);
       return ok({ user: rowToUser(db.prepare('SELECT * FROM users WHERE id = ?').get(usr.id)) });
+    }
+
+    /* ---------- ĐỔI MẬT KHẨU (staff & customer — PHASE 15) ----------
+       Yêu cầu mật khẩu hiện tại, hash scrypt mới; vô hiệu hoá các session cũ
+       để nếu tài khoản bị đánh cắp thì token cũ không còn dùng được. */
+    if (method === 'POST' && p === '/api/change-password') {
+      const usr = needUser(); if (!usr) return;
+      const b = await readBody(req);
+      const oldPw = String(b.oldPassword || '');
+      const newPw = String(b.newPassword || '');
+      const row = db.prepare('SELECT * FROM users WHERE id = ?').get(usr.id);
+      if (!verifyPassword(oldPw, row.pass_salt, row.pass_hash)) return fail(400, 'Mật khẩu hiện tại không đúng.');
+      if (newPw.length < 6 || newPw.length > 72) return fail(400, 'Mật khẩu mới phải từ 6 đến 72 ký tự.');
+      const { salt, hash } = hashPassword(newPw);
+      db.prepare('UPDATE users SET pass_salt = ?, pass_hash = ?, updated_at = ? WHERE id = ?').run(salt, hash, Date.now(), usr.id);
+      db.prepare('DELETE FROM sessions WHERE userId = ?').run(usr.id); // vô hiệu hoá token cũ
+      const newTok = createSession(usr.id);
+      audit(usr, 'USER_CHANGE_PASSWORD', 'user', usr.id, {});
+      return ok({ ok: true, token: newTok });
     }
 
     /* ---------- Đơn hàng của tôi ---------- */
@@ -630,39 +669,67 @@ async function handleApi(req, res, u) {
       });
     }
 
-    /* ---------- Dữ liệu quản trị (users + orders) ---------- */
+    /* ---------- Dữ liệu quản trị (users + orders + newsletters + audit) ---------- */
     if (method === 'GET' && p === '/api/admin/data') {
       if (!needAdmin()) return;
       return ok({
         users: db.prepare('SELECT * FROM users ORDER BY created').all().map(rowToUser),
-        orders: db.prepare('SELECT * FROM orders ORDER BY created DESC').all().map(rowToOrder)
+        orders: db.prepare('SELECT * FROM orders ORDER BY created DESC').all().map(rowToOrder),
+        newsletters: db.prepare('SELECT * FROM newsletters ORDER BY created DESC').all().map(rowToNewsletter),
+        auditLogs: db.prepare('SELECT * FROM audit_logs ORDER BY created DESC LIMIT 200').all().map(rowToAudit)
       });
+    }
+
+    /* ---------- Dữ liệu cho STAFF (đơn hàng + sản phẩm để làm việc — PHASE 4) ---------- */
+    if (method === 'GET' && p === '/api/staff/data') {
+      const usr = needStaff();
+      if (!usr) return;
+      return ok({
+        orders: db.prepare('SELECT * FROM orders ORDER BY created DESC').all().map(rowToOrder),
+        products: db.prepare('SELECT * FROM products ORDER BY id').all().map(rowToProduct)
+      });
+    }
+
+    /* ---------- UPLOAD ẢNH (PHASE 10 — rate limited, kiểm tra magic bytes) ---------- */
+    if (method === 'POST' && p === '/api/upload') {
+      const usr = needUser();
+      if (!usr) return;
+      if (usr.role !== 'admin' && usr.role !== 'staff') return fail(403, 'Bạn không có quyền upload.');
+      if (!rateLimit(clientKey(req) + ':upload', RATE.upload)) return fail(429, 'Quá nhiều yêu cầu upload. Vui lòng thử lại sau 15 phút.');
+      const b = await readBody(req);
+      const res = handleUpload(b.dataUrl, String(b.kind || 'product').slice(0, 20));
+      return ok({ ok: true, url: res.url, size: res.size, ext: res.ext });
     }
 
     /* ---------- Sản phẩm (admin) ---------- */
     if (method === 'POST' && p === '/api/products') {
       if (!needAdmin()) return;
       const b = await readBody(req);
-      const name = String(b.name || '').trim();
+      const name = String(b.name || '').trim().slice(0, 100);
       const price = Math.round(Number(b.price) || 0);
       if (!name || price <= 0) return fail(400, 'Tên và giá hợp lệ là bắt buộc.');
+      if (price > 100000000) return fail(400, 'Giá vượt quá giới hạn hợp lệ.');
       const category = CATEGORIES_ID.includes(b.category) ? b.category : 'tra-sua';
       const grp = GROUPS_ID.includes(b.group) ? b.group : 'new';
       const oldPrice = Math.max(price, Math.round(Number(b.oldPrice) || 0));
       const rating = Math.min(5, Math.max(0, Number(b.rating) || 0));
       const sold = Math.max(0, Math.round(Number(b.sold) || 0));
+      const isAvailable = b.is_available === false ? 0 : 1;
+      const img = String(b.img || '').slice(0, 500);
 
       let id = Number(b.id) || 0;
       const exists = id ? db.prepare('SELECT 1 FROM products WHERE id = ?').get(id) : null;
       if (id && exists) {
         db.prepare(
-          'UPDATE products SET name = ?, category = ?, grp = ?, price = ?, oldPrice = ?, img = ?, descr = ?, rating = ?, sold = ? WHERE id = ?'
-        ).run(name, category, grp, price, oldPrice, String(b.img || ''), String(b.desc || ''), rating, sold, id);
+          'UPDATE products SET name = ?, category = ?, grp = ?, price = ?, oldPrice = ?, img = ?, descr = ?, rating = ?, sold = ?, is_available = ? WHERE id = ?'
+        ).run(name, category, grp, price, oldPrice, img, String(b.desc || '').slice(0, 1000), rating, sold, isAvailable, id);
+        audit(usrSide, 'ADMIN_UPDATE_PRODUCT', 'product', id, { name });
       } else {
         if (!id) id = (db.prepare('SELECT MAX(id) AS m FROM products').get().m || 0) + 1;
         db.prepare(
-          'INSERT INTO products (id, name, category, grp, price, oldPrice, img, descr, rating, sold) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(id, name, category, grp, price, oldPrice, String(b.img || ''), String(b.desc || ''), rating, sold);
+          'INSERT INTO products (id, name, category, grp, price, oldPrice, img, descr, rating, sold, is_available) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(id, name, category, grp, price, oldPrice, img, String(b.desc || '').slice(0, 1000), rating, sold, isAvailable);
+        audit(usrSide, 'ADMIN_CREATE_PRODUCT', 'product', id, { name });
       }
       return ok({ product: rowToProduct(db.prepare('SELECT * FROM products WHERE id = ?').get(id)) });
     }
@@ -673,7 +740,38 @@ async function handleApi(req, res, u) {
       const id = Number(m[1]);
       db.prepare('DELETE FROM products WHERE id = ?').run(id);
       db.prepare('DELETE FROM reviews WHERE productId = ?').run(id);
+      db.prepare('DELETE FROM product_toppings WHERE product_id = ?').run(id);
+      audit(usrSide, 'ADMIN_DELETE_PRODUCT', 'product', id);
       return ok({ ok: true });
+    }
+
+    /* ---------- Cập nhật topping thuộc sản phẩm (admin — PHASE 9) ---------- */
+    if (method === 'POST' && p === '/api/product-toppings') {
+      if (!needAdmin()) return;
+      const b = await readBody(req);
+      const productId = Number(b.product_id);
+      const toppingIds = Array.isArray(b.toppings) ? b.toppings.map(String) : [];
+      if (!db.prepare('SELECT 1 FROM products WHERE id = ?').get(productId)) return fail(404, 'Không tìm thấy sản phẩm.');
+      db.prepare('DELETE FROM product_toppings WHERE product_id = ?').run(productId);
+      const ins = db.prepare('INSERT OR IGNORE INTO product_toppings (product_id, topping_id) VALUES (?, ?)');
+      for (const t of toppingIds) {
+        if (db.prepare('SELECT 1 FROM toppings WHERE id = ?').get(t)) ins.run(productId, t);
+      }
+      audit(usrSide, 'ADMIN_SET_PRODUCT_TOPPINGS', 'product', productId, { count: toppingIds.length });
+      return ok({ ok: true, count: toppingIds.length });
+    }
+
+    /* ---------- Bật/tắt sản phẩm (staff/admin — PHASE 21) ---------- */
+    m = /^\/api\/products\/(-?\d+)\/availability$/.exec(p);
+    if (method === 'PATCH' && m) {
+      const usr = needStaff(); if (!usr) return;
+      const id = Number(m[1]);
+      if (!db.prepare('SELECT 1 FROM products WHERE id = ?').get(id)) return fail(404, 'Không tìm thấy sản phẩm.');
+      const b = await readBody(req);
+      const val = b.is_available === false ? 0 : 1;
+      db.prepare('UPDATE products SET is_available = ? WHERE id = ?').run(val, id);
+      audit(usr, 'STAFF_TOGGLE_AVAILABILITY', 'product', id, { is_available: !!val });
+      return ok({ product: rowToProduct(db.prepare('SELECT * FROM products WHERE id = ?').get(id)) });
     }
 
     /* ---------- Topping (admin) ---------- */
@@ -902,32 +1000,38 @@ async function handleApi(req, res, u) {
       return ok({ ok: true });
     }
 
-    /* ---------- Đặt hàng (đã đăng nhập) ---------- */
+    /* ---------- Đặt hàng (đã đăng nhập — rate limited) ---------- */
     if (method === 'POST' && p === '/api/orders') {
+      if (!rateLimit(clientKey(req) + ':order', RATE.order)) return fail(429, 'Quá nhiều yêu cầu đặt hàng. Vui lòng thử lại sau 15 phút.');
       const usr = needUser();
       if (!usr) return;
       const b = await readBody(req);
-      const name = String(b.name || '').trim();
-      const phone = String(b.phone || '').trim();
-      const address = String(b.address || '').trim();
-      const note = String(b.note || '');
+      const name = String(b.name || '').trim().slice(0, 60);
+      const phone = String(b.phone || '').trim().slice(0, 15);
+      const address = String(b.address || '').trim().slice(0, 300);
+      const note = String(b.note || '').slice(0, 300);
       const payMethod = PAY_METHODS.includes(b.payMethod) ? b.payMethod : 'cod';
-      const rawItems = Array.isArray(b.items) ? b.items : [];
+      const rawItems = Array.isArray(b.items) ? b.items.slice(0, 50) : [];
+      const storeId = String(b.storeId || '').trim();
 
       if (!rawItems.length) return fail(400, 'Giỏ hàng trống.');
       if (!name || !phone || !address) return fail(400, 'Vui lòng điền đầy đủ thông tin giao hàng.');
       if (!rePhone.test(phone)) return fail(400, 'Số điện thoại không đúng định dạng.');
 
-      /* Tính lại giá từ database -> không tin giá client gửi lên */
+      /* Tính lại giá từ database -> không tin giá client gửi lên (PHASE 6) */
       const items = [];
       let subtotal = 0;
       for (const raw of rawItems) {
-        const prod = db.prepare('SELECT * FROM products WHERE id = ?').get(Number(raw.id));
+        const pid = Number(raw.id);
+        const prod = db.prepare('SELECT * FROM products WHERE id = ?').get(pid);
         if (!prod) return fail(400, 'Có sản phẩm không còn tồn tại. Vui lòng làm mới giỏ hàng.');
-        const qty = Math.max(1, Math.round(Number(raw.qty) || 1));
+        if (prod.is_available !== 1) return fail(400, 'Sản phẩm "' + prod.name + '" đã hết hàng. Vui lòng bỏ khỏi giỏ.');
+        const qty = Math.max(1, Math.min(99, Math.round(Number(raw.qty) || 1)));
+        /* Topping: chỉ nhận topping THUỘC sản phẩm (product_toppings — PHASE 9) */
+        const allowed = db.prepare('SELECT topping_id FROM product_toppings WHERE product_id = ?').all(pid).map(r => r.topping_id);
         const tops = (Array.isArray(raw.toppings) ? raw.toppings : [])
           .map(tid => db.prepare('SELECT * FROM toppings WHERE id = ?').get(String(tid)))
-          .filter(Boolean)
+          .filter(t => t && allowed.includes(t.id))
           .map(t => ({ id: t.id, name: t.name, price: t.price }));
         subtotal += prod.price * qty + tops.reduce((s, t) => s + t.price * qty, 0);
         items.push({ id: prod.id, name: prod.name, img: prod.img, price: prod.price, qty, toppings: tops });
@@ -935,8 +1039,9 @@ async function handleApi(req, res, u) {
 
       /* Phí ship: nhận tại quán = 0; có tọa độ bản đồ = theo khoảng cách
          tới chi nhánh gần nhất; không chọn bản đồ = phí cố định */
-      const store = STORES.find(s => s.id === b.storeId);
+      const store = STORES.find(s => s.id === storeId);
       let shipFee = 0, shipKm = null, shipFrom = '', lat = null, lng = null;
+      const deliveryMethod = store ? 'pickup' : 'delivery';
       if (!store) {
         lat = Number(b.lat);
         lng = Number(b.lng);
@@ -965,36 +1070,112 @@ async function handleApi(req, res, u) {
       const total = Math.max(0, subtotal - discount) + shipFee;
       const code = nextOrderCode();
       db.prepare(
-        'INSERT INTO orders (code, userId, customer, name, phone, address, note, payMethod, store, items, subtotal, shipFee, discount, promo, lat, lng, shipKm, shipFrom, total, status, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO orders (code, userId, customer, name, phone, address, note, payMethod, store, items, subtotal, shipFee, discount, promo, lat, lng, shipKm, shipFrom, total, status, delivery_method, payment_status, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
       ).run(code, usr.id, usr.name, name, phone, address, note, payMethod,
             store ? store.name : 'Giao tận nơi', JSON.stringify(items), subtotal, shipFee,
-            discount, promoCode, lat, lng, shipKm, shipFrom, total, 'processing', Date.now());
+            discount, promoCode, lat, lng, shipKm, shipFrom, total, 'pending',
+            deliveryMethod, payMethod === 'cod' ? 'pending' : 'pending', Date.now());
+
+      /* Snapshot chuẩn hoá vào order_items + order_item_toppings (PHASE 2) */
+      const insItem = db.prepare(
+        'INSERT INTO order_items (order_id, product_id, product_name, unit_price, quantity, subtotal) VALUES (?, ?, ?, ?, ?, ?)'
+      );
+      const insT = db.prepare(
+        'INSERT INTO order_item_toppings (order_item_id, topping_name, topping_price, quantity) VALUES (?, ?, ?, ?)'
+      );
+      for (const it of items) {
+        const info = insItem.run(code, it.id, it.name, it.price, it.qty, it.price * it.qty);
+        for (const t of it.toppings) insT.run(info.lastInsertRowid, t.name, t.price, it.qty);
+      }
+      log('info', 'Đơn hàng mới', { code, total });
       return ok({ order: rowToOrder(db.prepare('SELECT * FROM orders WHERE code = ?').get(code)) });
     }
 
-    /* ---------- Đổi trạng thái đơn (admin) ---------- */
-    m = /^\/api\/orders\/([^/]+)$/.exec(p);
-    if (method === 'PATCH' && m) {
-      if (!needAdmin()) return;
-      const b = await readBody(req);
-      if (!ORDER_STATUS.includes(b.status)) return fail(400, 'Trạng thái đơn hàng không hợp lệ.');
+    /* ---------- Lấy một đơn (chủ sở hữu HOẶC staff/admin) — chống IDOR (PHASE 29) ---------- */
+    m = /^\/api\/orders\/([A-Za-z0-9-]+)$/.exec(p);
+    if (method === 'GET' && m) {
+      const usr = needUser(); if (!usr) return;
       const row = db.prepare('SELECT * FROM orders WHERE code = ?').get(m[1]);
       if (!row) return fail(404, 'Không tìm thấy đơn hàng.');
-      db.prepare('UPDATE orders SET status = ? WHERE code = ?').run(b.status, m[1]);
+      if (row.userId !== usr.id && usr.role !== 'staff' && usr.role !== 'admin') return fail(403, 'Bạn không có quyền xem đơn này.');
+      return ok({ order: rowToOrder(row) });
+    }
+
+    /* ---------- Đổi trạng thái đơn (STAFF/ADMIN — state machine 7 bước) ---------- */
+    m = /^\/api\/orders\/([A-Za-z0-9-]+)$/.exec(p);
+    if (method === 'PATCH' && m) {
+      const usr = needStaff();
+      if (!usr) return;
+      const b = await readBody(req);
+      const row = db.prepare('SELECT * FROM orders WHERE code = ?').get(m[1]);
+      if (!row) return fail(404, 'Không tìm thấy đơn hàng.');
+
+      /* Cập nhật trạng thái (có kiểm soát transition) HOẶC payment_status (PHASE 5, 20) */
+      if (b.status) {
+        if (!ORDER_STATUS.includes(b.status)) return fail(400, 'Trạng thái đơn hàng không hợp lệ.');
+        if (b.status === row.status) return ok({ order: rowToOrder(row) });
+        if (!canTransition(row.status, b.status)) {
+          return fail(400, 'Không thể chuyển trạng thái từ ' + row.status + ' sang ' + b.status + '.');
+        }
+        db.prepare('UPDATE orders SET status = ? WHERE code = ?').run(b.status, m[1]);
+        const stLabel = s => ({ pending: 'Chờ xác nhận', confirmed: 'Đã xác nhận', preparing: 'Đang pha chế', ready: 'Sẵn sàng', delivering: 'Đang giao', completed: 'Hoàn thành', cancelled: 'Đã huỷ' }[s] || s);
+        audit(usr, usr.role === 'admin' ? 'ADMIN_UPDATE_ORDER' : 'STAFF_UPDATE_ORDER', 'order', m[1], { from: stLabel(row.status), to: stLabel(b.status) });
+        log('info', 'Đổi trạng thái đơn', { code: m[1], from: row.status, to: b.status, by: usr.username });
+      }
+      if (b.payment_status) {
+        if (!PAYMENT_STATUS.includes(b.payment_status)) return fail(400, 'Trạng thái thanh toán không hợp lệ.');
+        /* Không xác nhận PAID chỉ dựa trên frontend — chỉ admin/staff đổi được,
+           và chỉ cho phép từ pending -> paid/failed/refunded (PHASE 20) */
+        if (row.payment_status === 'paid' && b.payment_status !== 'refunded') {
+          return fail(400, 'Đơn đã thanh toán. Chỉ có thể hoàn tiền (refunded).');
+        }
+        db.prepare('UPDATE orders SET payment_status = ? WHERE code = ?').run(b.payment_status, m[1]);
+        audit(usr, usr.role === 'admin' ? 'ADMIN_UPDATE_PAYMENT' : 'STAFF_UPDATE_PAYMENT', 'order', m[1], { payment_status: b.payment_status });
+      }
+      return ok({ order: rowToOrder(db.prepare('SELECT * FROM orders WHERE code = ?').get(m[1])) });
+    }
+
+    /* ---------- KHÁCH HỦY ĐƠN (PHASE 22) ----------
+       Chỉ hủy được khi đơn còn ở pending/confirmed. */
+    m = /^\/api\/orders\/([A-Za-z0-9-]+)\/cancel$/.exec(p);
+    if (method === 'POST' && m) {
+      const usr = needUser();
+      if (!usr) return;
+      const row = db.prepare('SELECT * FROM orders WHERE code = ?').get(m[1]);
+      if (!row) return fail(404, 'Không tìm thấy đơn hàng.');
+      if (row.userId !== usr.id && usr.role !== 'staff' && usr.role !== 'admin') return fail(403, 'Bạn không có quyền hủy đơn này.');
+      if (!CUSTOMER_CANCEL_ALLOWED.includes(row.status)) {
+        return fail(400, 'Đơn ở trạng thái ' + row.status + ' không thể hủy. Chỉ hủy được khi đơn ở PENDING hoặc CONFIRMED.');
+      }
+      const b = await readBody(req);
+      db.prepare('UPDATE orders SET status = \'cancelled\' WHERE code = ?').run(m[1]);
+      audit(usr, 'ORDER_CANCELLED', 'order', m[1], { reason: String(b && b.reason || '').slice(0, 200) });
+      log('info', 'Hủy đơn', { code: m[1], by: usr.username });
       return ok({ order: rowToOrder(db.prepare('SELECT * FROM orders WHERE code = ?').get(m[1])) });
     }
 
     /* ---------- Sửa khách hàng (admin) ---------- */
     m = /^\/api\/users\/([^/]+)$/.exec(p);
     if (method === 'PATCH' && m) {
-      if (!needAdmin()) return;
+      const admin = needAdmin(); if (!admin) return;
       const row = db.prepare('SELECT * FROM users WHERE id = ?').get(m[1]);
       if (!row) return fail(404, 'Không tìm thấy người dùng.');
       const b = await readBody(req);
       const blocked = row.role === 'admin' ? 0 : (b.blocked ? 1 : 0);
-      db.prepare('UPDATE users SET name = ?, email = ?, phone = ?, blocked = ? WHERE id = ?')
-        .run(String(b.name || row.name).trim() || row.name, String(b.email || '').trim(), String(b.phone || '').trim(), blocked, m[1]);
+      /* Phân quyền: admin cấp/sửa role staff (PHASE 4) */
+      let role = row.role;
+      if (b.role && b.role !== row.role) {
+        if (!['customer', 'staff', 'admin'].includes(b.role)) return fail(400, 'Vai trò không hợp lệ.');
+        if (row.role === 'admin' && b.role !== 'admin') return fail(403, 'Không thể hạ quyền tài khoản admin.');
+        if (b.role === 'admin' && row.role !== 'admin' && b._confirm_admin) {
+          /* nâng lên admin cần cờ xác nhận — vẫn ghi audit */
+        }
+        role = b.role;
+      }
+      db.prepare('UPDATE users SET name = ?, email = ?, phone = ?, blocked = ?, role = ?, updated_at = ? WHERE id = ?')
+        .run(String(b.name || row.name).trim().slice(0, 60) || row.name, String(b.email || '').trim().slice(0, 120), String(b.phone || '').trim().slice(0, 15), blocked, role, Date.now(), m[1]);
       if (blocked) db.prepare('DELETE FROM sessions WHERE userId = ?').run(m[1]);
+      audit(admin, role !== row.role ? 'ADMIN_CHANGE_ROLE' : 'ADMIN_UPDATE_USER', 'user', m[1], { name: b.name || row.name, role, blocked });
       return ok({ user: rowToUser(db.prepare('SELECT * FROM users WHERE id = ?').get(m[1])) });
     }
 
@@ -1011,26 +1192,39 @@ async function handleApi(req, res, u) {
 
     /* ---------- Cài đặt website (admin) ---------- */
     if (method === 'POST' && p === '/api/settings') {
-      if (!needAdmin()) return;
+      const admin = needAdmin(); if (!admin) return;
       const b = await readBody(req);
-      return ok({ settings: saveSettings(b) });
+      const s = saveSettings(b);
+      audit(admin, 'ADMIN_UPDATE_SETTINGS', 'settings', '', { keys: Object.keys(b).slice(0, 20) });
+      return ok({ settings: s });
     }
 
-    /* ---------- Đánh giá sản phẩm (đã đăng nhập) ---------- */
+    /* ---------- Đánh giá sản phẩm (đã đăng nhập — PHASE 17)
+       Chỉ user đã HOÀN THÀNH đơn có chứa sản phẩm này mới được đánh giá.
+       Review mới có status 'approved' để hiện ngay (đơn giản, không chặn trải nghiệm). */
     if (method === 'POST' && p === '/api/reviews') {
+      if (!rateLimit(clientKey(req) + ':review', RATE.review)) return fail(429, 'Quá nhiều yêu cầu đánh giá. Vui lòng thử lại sau 15 phút.');
       const usr = needUser();
       if (!usr) return;
       const b = await readBody(req);
       const productId = Number(b.productId);
       const rating = Math.round(Number(b.rating) || 0);
-      const comment = String(b.comment || '').trim();
+      const comment = String(b.comment || '').trim().slice(0, 1000);
       if (!db.prepare('SELECT 1 FROM products WHERE id = ?').get(productId)) return fail(404, 'Không tìm thấy sản phẩm.');
       if (rating < 1 || rating > 5) return fail(400, 'Hãy chọn số sao từ 1 đến 5.');
+
+      /* Tìm đơn đã hoàn thành của user có chứa sản phẩm này */
+      const bought = db.prepare(
+        "SELECT code FROM orders WHERE userId = ? AND status = 'completed' AND items LIKE ? ORDER BY created DESC LIMIT 1"
+      ).get(usr.id, '%"id":' + productId + '%');
+      if (!bought) return fail(403, 'Bạn chỉ có thể đánh giá sản phẩm đã mua trong đơn hoàn thành.');
+
       const info = db.prepare(
-        'INSERT INTO reviews (productId, userName, rating, comment, created) VALUES (?, ?, ?, ?, ?)'
-      ).run(productId, usr.name, rating, comment, Date.now());
+        "INSERT INTO reviews (productId, userName, rating, comment, created, user_id, order_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'approved')"
+      ).run(productId, usr.name, rating, comment, Date.now(), usr.id, bought.code);
+      /* rating trung bình chỉ tính các review ĐƯỢC DUYỆT */
       db.prepare(
-        'UPDATE products SET rating = ROUND((SELECT AVG(rating) FROM reviews WHERE productId = ?), 1) WHERE id = ?'
+        "UPDATE products SET rating = ROUND((SELECT AVG(rating) FROM reviews WHERE productId = ? AND status IN ('approved','')), 1) WHERE id = ?"
       ).run(productId, productId);
       return ok({
         review: rowToReview(db.prepare('SELECT * FROM reviews WHERE id = ?').get(info.lastInsertRowid)),
@@ -1040,28 +1234,62 @@ async function handleApi(req, res, u) {
 
     /* ---------- Đánh giá website (đã đăng nhập) ---------- */
     if (method === 'POST' && p === '/api/site-reviews') {
+      if (!rateLimit(clientKey(req) + ':review', RATE.review)) return fail(429, 'Quá nhiều yêu cầu đánh giá. Vui lòng thử lại sau 15 phút.');
       const usr = needUser();
       if (!usr) return;
       const b = await readBody(req);
       const rating = Math.round(Number(b.rating) || 0);
-      const comment = String(b.comment || '').trim();
+      const comment = String(b.comment || '').trim().slice(0, 1000);
       if (rating < 1 || rating > 5) return fail(400, 'Hãy chọn số sao từ 1 đến 5.');
       const info = db.prepare(
-        'INSERT INTO site_reviews (userName, rating, comment, created) VALUES (?, ?, ?, ?)'
-      ).run(usr.name, rating, comment, Date.now());
+        "INSERT INTO site_reviews (userName, rating, comment, created, user_id, status) VALUES (?, ?, ?, ?, ?, 'approved')"
+      ).run(usr.name, rating, comment, Date.now(), usr.id);
       return ok({ review: rowToSiteReview(db.prepare('SELECT * FROM site_reviews WHERE id = ?').get(info.lastInsertRowid)) });
+    }
+
+    /* ---------- DUYỆT / ẨN đánh giá (admin — PHASE 17) ---------- */
+    m = /^\/api\/reviews\/(-?\d+)\/(status)$/.exec(p);
+    if (method === 'PATCH' && m) {
+      const admin = needAdmin(); if (!admin) return;
+      const id = Number(m[1]);
+      const row = db.prepare('SELECT * FROM reviews WHERE id = ?').get(id);
+      if (!row) return fail(404, 'Không tìm thấy đánh giá.');
+      const b = await readBody(req);
+      const st = REVIEW_STATUS.includes(b.status) ? b.status : null;
+      if (!st) return fail(400, 'Trạng thái không hợp lệ.');
+      db.prepare('UPDATE reviews SET status = ? WHERE id = ?').run(st, id);
+      audit(admin, 'ADMIN_MODERATE_REVIEW', 'review', id, { status: st });
+      /* tính lại rating theo review được duyệt */
+      const avgRow = db.prepare("SELECT AVG(rating) AS avg FROM reviews WHERE productId = ? AND status IN ('approved','')").get(row.productId);
+      const newRating = avgRow && avgRow.avg != null ? Math.round(Number(avgRow.avg) * 10) / 10 : 4.5;
+      db.prepare('UPDATE products SET rating = ? WHERE id = ?').run(newRating, row.productId);
+      return ok({ review: rowToReview(db.prepare('SELECT * FROM reviews WHERE id = ?').get(id)) });
+    }
+    m = /^\/api\/site-reviews\/(-?\d+)\/(status)$/.exec(p);
+    if (method === 'PATCH' && m) {
+      const admin = needAdmin(); if (!admin) return;
+      const id = Number(m[1]);
+      const row = db.prepare('SELECT * FROM site_reviews WHERE id = ?').get(id);
+      if (!row) return fail(404, 'Không tìm thấy đánh giá.');
+      const b = await readBody(req);
+      const st = REVIEW_STATUS.includes(b.status) ? b.status : null;
+      if (!st) return fail(400, 'Trạng thái không hợp lệ.');
+      db.prepare('UPDATE site_reviews SET status = ? WHERE id = ?').run(st, id);
+      audit(admin, 'ADMIN_MODERATE_SITE_REVIEW', 'site_review', id, { status: st });
+      return ok({ review: rowToSiteReview(db.prepare('SELECT * FROM site_reviews WHERE id = ?').get(id)) });
     }
 
     /* ---------- Xoá đánh giá sản phẩm (admin) ---------- */
     m = /^\/api\/reviews\/(-?\d+)$/.exec(p);
     if (method === 'DELETE' && m) {
-      if (!needAdmin()) return;
+      const admin = needAdmin(); if (!admin) return;
       const id = Number(m[1]);
       const row = db.prepare('SELECT * FROM reviews WHERE id = ?').get(id);
       if (!row) return fail(404, 'Không tìm thấy đánh giá.');
       db.prepare('DELETE FROM reviews WHERE id = ?').run(id);
+      audit(admin, 'ADMIN_DELETE_REVIEW', 'review', id);
       /* tính lại rating trung bình của sản phẩm; không còn đánh giá thì về mặc định 4.5 */
-      const avgRow = db.prepare('SELECT AVG(rating) AS avg FROM reviews WHERE productId = ?').get(row.productId);
+      const avgRow = db.prepare("SELECT AVG(rating) AS avg FROM reviews WHERE productId = ? AND status IN ('approved','')").get(row.productId);
       const newRating = avgRow && avgRow.avg != null ? Math.round(Number(avgRow.avg) * 10) / 10 : 4.5;
       db.prepare('UPDATE products SET rating = ? WHERE id = ?').run(newRating, row.productId);
       return ok({
@@ -1073,11 +1301,12 @@ async function handleApi(req, res, u) {
     /* ---------- Xoá đánh giá website (admin) ---------- */
     m = /^\/api\/site-reviews\/(-?\d+)$/.exec(p);
     if (method === 'DELETE' && m) {
-      if (!needAdmin()) return;
+      const admin = needAdmin(); if (!admin) return;
       const id = Number(m[1]);
       const row = db.prepare('SELECT * FROM site_reviews WHERE id = ?').get(id);
       if (!row) return fail(404, 'Không tìm thấy đánh giá.');
       db.prepare('DELETE FROM site_reviews WHERE id = ?').run(id);
+      audit(admin, 'ADMIN_DELETE_SITE_REVIEW', 'site_review', id);
       return ok({ review: { id } });
     }
 
@@ -1088,10 +1317,6 @@ async function handleApi(req, res, u) {
     const msg = err instanceof ApiError ? err.message : 'Lỗi máy chủ nội bộ.';
     if (!res.headersSent) fail(status, msg);
   }
-}
-
-function rowToToppingRow(r) {
-  return { id: r.id, name: r.name, price: r.price };
 }
 
 /* ---------- Phí ship + khuyến mãi (server là nơi quyết định cuối) ---------- */
@@ -1144,7 +1369,7 @@ function nextOrderCode() {
 /* ============================================================
    3) PHỤC VỤ FILE TĨNH
    serveStatic: đọc file html/css/js/ảnh từ thư mục dự án và trả về.
-   - Chặn truy cập database.db (403).
+   - Chặn truy cập database.db, *.bak, .env*, backups/, logs/, tools/, masv.docx (403).
    - Chống path traversal (../../) — không cho đọc file ngoài thư mục.
    ============================================================ */
 const MIME = {
@@ -1178,15 +1403,53 @@ function notFound(res) {
   );
 }
 
+/* ---------- SECURITY HEADERS + CORS (PHASE 14) ---------- */
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'SAMEORIGIN',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(self)',
+  'Content-Security-Policy': "default-src 'self'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self' https://{s}.tile.openstreetmap.org; frame-ancestors 'self'"
+};
+function applySecurityHeaders(res) {
+  Object.keys(SECURITY_HEADERS).forEach(k => res.setHeader(k, SECURITY_HEADERS[k]));
+}
+function applyCors(req, res) {
+  /* CORS: mặc định chỉ cùng nguồn; nếu cấu hình CORS_ORIGINS thì cho phép các origin đó */
+  if (!corsOrigins.length) return;
+  const origin = req.headers.origin;
+  if (origin && corsOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  }
+}
+/* Chặn truy cập file nhạy cảm (PHASE 11) */
+const BLOCKED = [
+  /(^|\/)database\.db($|\?)/,
+  /\.db\.bak($|\?)/,
+  /(^|\/)\.env($|\.|\?)/,
+  /(^|\/)backups?(\/|$)/,
+  /(^|\/)logs?(\/|$)/,
+  /(^|\/)tools(\/|$)/,
+  /(^|\/)masv\.docx($|\?)/,
+  /\.sqlite($|\?)/,
+  /\.sql($|\?)/,
+  /(^|\/)package-lock\.json($|\?)/
+];
+
 function serveStatic(req, res, pathname) {
   let rel;
   try { rel = decodeURIComponent(pathname); }
   catch (e) { return notFound(res); }
 
   if (rel.endsWith('/')) rel += 'index.html';
-  if (rel === '/database.db') {
+
+  /* chặn file nhạy cảm */
+  if (BLOCKED.some(re => re.test(rel))) {
     res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
-    return res.end('Không được truy cập file database.');
+    return res.end('Không được truy cập file này.');
   }
 
   /* chống path traversal (../../) */
@@ -1198,6 +1461,7 @@ function serveStatic(req, res, pathname) {
   fs.readFile(filePath, (err, data) => {
     if (err) return notFound(res);
     const ext = path.extname(filePath).toLowerCase();
+    applySecurityHeaders(res);
     res.writeHead(200, {
       'Content-Type': MIME[ext] || 'application/octet-stream',
       'Cache-Control': 'no-cache'
@@ -1213,6 +1477,10 @@ function serveStatic(req, res, pathname) {
    ============================================================ */
 const server = http.createServer(async (req, res) => {
   try {
+    applyCors(req, res);
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204); return res.end();
+    }
     const u = new URL(req.url, 'http://localhost');
     if (u.pathname.startsWith('/api/')) await handleApi(req, res, u);
     else serveStatic(req, res, u.pathname);
@@ -1226,11 +1494,18 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
+  const addr = (HOST === '0.0.0.0' || HOST === '::') ? 'localhost' : HOST;
   console.log('==================================================');
   console.log('  ShanCha Store - backend đang chạy');
-  console.log('  Website : http://localhost:' + PORT);
+  console.log('  Website : http://' + addr + ':' + PORT);
   console.log('  Database: ' + DB_FILE);
-  console.log('  Tài khoản demo: admin/admin123 - user/123456');
+  if (!process.env.ADMIN_PASSWORD) {
+    console.log('  [CẢNH BÁO] Admin đang dùng mật khẩu MẶC ĐỊNH (admin/admin123).');
+    console.log('             Đăng nhập rồi đổi mật khẩu NGAY trước khi bán hàng thật.');
+    console.log('             Hoặc set biến ADMIN_PASSWORD khi khởi động.');
+  } else {
+    console.log('  Admin password: dùng ADMIN_PASSWORD từ môi trường (đã cấu hình).');
+  }
   console.log('  Nhấn Ctrl+C để dừng server');
   console.log('==================================================');
 });

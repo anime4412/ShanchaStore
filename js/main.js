@@ -33,19 +33,48 @@ document.addEventListener('DOMContentLoaded', async () => {
   const grid = document.getElementById('product-grid');
   const tabs = [...document.querySelectorAll('.group-tab')];
   let currentGroup = 'all';
+  const PRODUCTS_PER_PAGE = 6;
+  let homePage = 1;
 
   function renderProducts(group) {
     const list = Store.getProducts();
     const filtered = group === 'all'
       ? list
       : list.filter(p => p.group === group);
-    grid.innerHTML = filtered.map(UI.productCard).join('') || '<p style="text-align:center;color:var(--muted)">Không có sản phẩm.</p>';
+    const total = filtered.length;
+    const pages = Math.max(1, Math.ceil(total / PRODUCTS_PER_PAGE));
+    homePage = Math.min(homePage, pages);
+    const pageList = filtered.slice((homePage - 1) * PRODUCTS_PER_PAGE, homePage * PRODUCTS_PER_PAGE);
+    grid.innerHTML = pageList.map(UI.productCard).join('') || '<p style="text-align:center;color:var(--muted)">Không có sản phẩm.</p>';
     grid.querySelectorAll('[data-act="view"]').forEach(b => {
       b.addEventListener('click', () => UI.openProductModal(Number(b.closest('.product-card').dataset.id)));
     });
     grid.querySelectorAll('[data-act="add"]').forEach(b => {
       b.addEventListener('click', () => {
         Cart.openToppingModal(Number(b.closest('.product-card').dataset.id), 'add');
+      });
+    });
+    renderHomePager(pages, total);
+  }
+
+  function renderHomePager(pages, total) {
+    const wrap = document.getElementById('home-pager');
+    if (!wrap) return;
+    if (pages <= 1) { wrap.innerHTML = ''; return; }
+    let html = '<span class="pager-info">Trang ' + homePage + '/' + pages + ' · ' + total + ' món</span>';
+    html += '<button data-p="' + (homePage - 1) + '"' + (homePage <= 1 ? ' disabled' : '') + '>‹</button>';
+    for (let i = 1; i <= pages; i++) {
+      html += '<button data-p="' + i + '"' + (i === homePage ? ' class="active"' : '') + '>' + i + '</button>';
+    }
+    html += '<button data-p="' + (homePage + 1) + '"' + (homePage >= pages ? ' disabled' : '') + '>›</button>';
+    wrap.innerHTML = html;
+    wrap.querySelectorAll('button').forEach(b => {
+      b.addEventListener('click', () => {
+        const np = Number(b.dataset.p);
+        if (np < 1 || np > pages) return;
+        homePage = np;
+        renderProducts(currentGroup);
+        grid.scrollIntoView({ behavior: 'smooth', block: 'start' });
       });
     });
   }
@@ -55,6 +84,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       tabs.forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       currentGroup = tab.dataset.group;
+      homePage = 1;
       renderProducts(currentGroup);
     });
   });

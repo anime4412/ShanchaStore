@@ -21,11 +21,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await UI.initCommon();
 
-  // nếu đã đăng nhập thì chuyển thẳng
+  // nếu đã đăng nhập thì chuyển thẳng theo vai trò
   if (Store.isLoggedIn()) {
-    const dest = new URLSearchParams(location.search).get('next') || 'index.html';
-    if (Store.isAdmin() && !location.search.includes('next=')) location.href = 'admin.html';
-    else location.href = dest;
+    const dest = new URLSearchParams(location.search).get('next');
+    if (dest) { location.href = dest; return; }
+    const me = Store.currentUser();
+    if (me.role === 'admin') location.href = 'admin.html';
+    else if (me.role === 'staff') location.href = 'staff.html';
+    else location.href = 'index.html';
     return;
   }
 
@@ -62,8 +65,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const next = new URLSearchParams(location.search).get('next') || 'index.html';
 
   function redirectAfterLogin(user) {
-    if (user.role === 'admin' && !next.includes('admin')) location.href = 'admin.html';
-    else location.href = next;
+    if (user.role === 'admin') location.href = 'admin.html';
+    else if (user.role === 'staff') location.href = 'staff.html';
+    else location.href = next && next !== 'login.html' ? next : 'index.html';
   }
 
   /* ---------- Đăng nhập bằng email ---------- */

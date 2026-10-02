@@ -39,10 +39,11 @@ qua API thật; dữ liệu được lưu trong `database.db`, **tắt máy/rest
 
 ## 👤 Tài khoản demo
 
-| Vai trò | Tên đăng nhập | Mật khẩu |
-|---|---|---|
-| **Admin** (quản trị) | `admin` | `admin123` |
-| **Khách hàng** | `user` | `123456` |
+| Vai trò | Tên đăng nhập | Mật khẩu | Sau khi đăng nhập |
+|---|---|---|---|
+| **Admin** (quản lý toàn bộ + nhân viên) | `admin` | `admin123` | → `admin.html` |
+| **Nhân viên** (xử lý đơn, bật/tắt hết hàng) | `user` | `123456` | → `staff.html` |
+| **Khách hàng** (mua hàng, xem đơn, đánh giá) | `customer` | `123456` | → trang chủ |
 
 Hoặc tự **đăng ký** tài khoản mới trên trang Đăng nhập.
 
@@ -177,3 +178,68 @@ ShanchaStore/
 - **Ảnh sản phẩm**: upload từ máy (base64) hoặc dán link ảnh, có preview.
 - **Đánh giá**: khách đánh giá sản phẩm (sao + bình luận) hiển thị trong modal; đánh giá website ở trang chủ; admin quản lý & xoá trong trang "Đánh giá".
 - **Quản lý danh mục**: admin thêm/sửa/xoá danh mục trong trang "Danh mục" (bảng `categories` trong SQLite). Danh mục mới tự xuất hiện trong bộ lọc sản phẩm (admin, trang Menu, form sản phẩm, trang chủ). Không xoá được danh mục còn sản phẩm.
+
+---
+
+## 🚀 NÂNG CẤP PRODUCTION (v2.0)
+
+Project đã được nâng cấp lên kiến trúc production thực tế. Các thay đổi chính:
+
+### Bảo mật (Critical → Low)
+- 🔴 **Gỡ bỏ `google-login-demo`** — trước đây cho phép chiếm tài khoản chỉ bằng email. Giờ bắt buộc cấu hình `GOOGLE_CLIENT_ID` mới dùng Google.
+- 🔴 **Chặn truy cập file nhạy cảm**: `database.db`, `*.bak`, `.env`, `backups/`, `logs/`, `tools/`, `masv.docx` → 403.
+- 🔴 **Rate limiting** cho login/register/orders/reviews/upload (chống brute-force).
+- 🔴 **Upload ảnh an toàn**: kiểm tra magic bytes JPEG/PNG/WebP, tên file ngẫu nhiên, lưu vào `uploads/` (không còn base64 khổng lồ trong DB).
+- 🟠 **Security headers**: CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy.
+- 🟠 **Bootstrap không lộ `newsletters`** (bảo vệ email người dùng).
+- 🟠 Không trả stack trace / lộ cấu trúc DB cho client.
+
+### Đơn hàng & phân quyền
+- 🟠 **State machine 7 bước**: PENDING → CONFIRMED → PREPARING → READY → DELIVERING → COMPLETED (+ CANCELLED). Server kiểm soát transition, không tin client.
+- 🟠 **Role STAFF**: xem/đổi trạng thái đơn, bật/tắt sản phẩm; không quản lý admin/cấu hình.
+- 🟠 **Khách hủy đơn** được khi đơn ở PENDING/CONFIRMED.
+- 🟠 **`payment_status`** (PENDING/PAID/FAILED/REFUNDED) — không xác nhận PAID từ frontend.
+- 🟠 **`product_toppings`**: topping chỉ hợp lệ khi thuộc sản phẩm.
+- 🟠 **`is_available`**: staff tắt sản phẩm khi hết nguyên liệu; server từ chối đặt hàng.
+- 🟠 **Review moderation**: chỉ user đã hoàn thành đơn mới đánh giá; admin duyệt/ẩn/xoá; rating tính theo review được duyệt.
+- 🟠 **`audit_logs`** (Nhật ký hệ thống): truy vết mọi hành động admin/staff + IP.
+
+### Cơ sở dữ liệu (migration GIỮ NGUYÊN dữ liệu)
+- ⚠️ **Không xoá `database.db`**. Schema mới nằm ở `js/db-schema.js`, tự động chạy migration:
+  - Thêm cột: `users.status/updated_at`, `products.is_available`, `orders.delivery_method/payment_status`, `reviews.user_id/order_id/status`, `site_reviews.user_id/status`.
+  - Bảng mới: `product_toppings`, `order_items`, `order_item_toppings`, `audit_logs`, `uploads`.
+  - Ánh xạ trạng thái cũ → 7 bước mới (done→completed...). Tách `items` JSON cũ thành snapshot `order_items`.
+  - Idempotent (chạy lại an toàn), tự động backup trước khi migration.
+  - Index cho hiệu năng.
+
+### Cách chạy
+```bash
+node server.js          # dev / production đều được
+# hoặc với PM2 (tự restart khi crash):
+npm i -g pm2
+pm2 start ecosystem.config.js
+```
+
+### Backup database
+```bash
+npm run backup          # sao backup vào backups/database-YYYY-MM-DD-HHmm.db (giữ 15 bản)
+# hoặc tự động: cấu hình cron:
+# 0 2 * * * cd /path/to/shancha && node tools/backup.js
+```
+
+### Biến môi trường (.env)
+Copy `.env.example` → `.env`. Bắt buộc trong production:
+- `NODE_ENV=production`, `PORT`, `HOST`
+- `DATABASE_PATH` (tuỳ chọn), `SHIP_FEE`
+- `GOOGLE_CLIENT_ID` (nếu muốn đăng nhập Google thật)
+- Các ngưỡng rate limit: `RATE_LOGIN_MAX`, `RATE_ORDER_MAX`, `RATE_REVIEW_MAX`, `RATE_UPLOAD_MAX`
+- `CORS_ORIGINS` (danh sách origin được phép, cách nhau dấu phẩy)
+
+Eo lưu ý: **không commit `.env`** (đã trong `.gitignore`).
+
+### Deploy kiến trúc đề xuất
+```
+Internet → HTTPS (Nginx/Caddy) → PM2 → Node.js → SQLite (database.db)
+```
+- `database.db`, `uploads/`, `logs/`, `backups/` nên nằm ngoài `public/` (đã được chặn qua static server).
+- SQLite phù hợp cho lưu lượng vừa; nên giữ 1 instance PM2.

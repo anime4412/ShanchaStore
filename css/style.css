@@ -178,6 +178,7 @@ textarea {
 }
 .nav {
   display: flex;
+  align-items: center;
   gap: 22px;
   margin-left: 8px;
 }
@@ -188,6 +189,8 @@ textarea {
   padding: 6px 2px;
   border-bottom: 2px solid transparent;
   transition: 0.2s;
+  white-space: nowrap;
+  line-height: 1.2;
 }
 .nav-link:hover,
 .nav-link.active {
@@ -209,6 +212,10 @@ textarea {
 .nav-user-name {
   font-weight: 600;
   font-size: 0.9rem;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .badge-admin {
   background: var(--green);
@@ -1266,6 +1273,31 @@ textarea {
 }
 
 /* ---------- Responsive ---------- */
+@media (max-width: 1080px) {
+  .nav {
+    gap: 14px;
+  }
+  .header-actions {
+    gap: 10px;
+  }
+  .nav-user {
+    gap: 8px;
+  }
+  .nav-user-name {
+    max-width: 130px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Ẩn nhãn chữ của nút phụ khi hẹp — chỉ giữ icon */
+  .nav-user .nav-link {
+    font-size: 0;
+  }
+  .nav-user .nav-link svg {
+    width: 18px;
+    height: 18px;
+  }
+}
 @media (max-width: 900px) {
   .story-grid,
   .flash-grid {
@@ -1930,4 +1962,131 @@ a.nav-user-name {
 }
 a.nav-user-name:hover {
   color: var(--primary);
+}
+
+/* ============================================================
+   PAGINATION DÙNG CHUNG (trang chủ, menu, admin, staff)
+   ============================================================ */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 22px auto 4px;
+  flex-wrap: wrap;
+  user-select: none;
+}
+.pager .pager-info {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-right: 8px;
+  white-space: nowrap;
+}
+.pager button {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.pager button:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+.pager button.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+}
+.pager button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   TRANG GIỚI THIỆU (about.html)
+   ============================================================ */
+.about-hero {
+  background: linear-gradient(135deg, var(--accent, #C97B4A), var(--primary, #8a4b2a));
+}
+.about-values {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 18px;
+  margin-top: 8px;
+}
+.about-value {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 26px 20px;
+  text-align: center;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.about-value:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+}
+.about-value .ic-big {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent, #C97B4A) 14%, transparent);
+  color: var(--accent, #C97B4A);
+  margin-bottom: 14px;
+}
+.about-value h3 {
+  font-size: 1.05rem;
+  margin: 0 0 8px;
+}
+.about-value p {
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+  margin: 0;
+}
+.about-timeline {
+  position: relative;
+  padding-left: 26px;
+  border-left: 2px solid var(--line);
+  margin-top: 18px;
+}
+.about-step {
+  position: relative;
+  padding: 0 0 26px 18px;
+}
+.about-step::before {
+  content: "";
+  position: absolute;
+  left: -33px;
+  top: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent, #C97B4A);
+  border: 3px solid var(--card);
+}
+.about-step:last-child {
+  padding-bottom: 0;
+}
+.about-step b {
+  font-size: 1.05rem;
+  color: var(--primary);
+  display: block;
+  margin-bottom: 4px;
+}
+.about-step p {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
+  margin: 0;
 }

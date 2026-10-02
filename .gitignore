@@ -1,2 +1,20 @@
-# Database SQLite của server local
+# Database SQLite (server local)
 database.db
+database.db.bak
+
+# Môi trường / bí mật — TUYỆT ĐỐI không commit
+.env
+.env.local
+
+# Backup + uploads + logs (dữ liệu nhạy cảm)
+backups/
+uploads/
+logs/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Hệ điều hành / editor
+.DS_Store
+Thumbs.db

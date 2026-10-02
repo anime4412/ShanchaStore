@@ -1,8 +1,14 @@
 # ============================================================
 #   ShanChaStore - Render Blueprint (render.yaml)
 #   Deploy nhanh lên Render.com: tạo Blueprint -> chọn repo -> tự chạy.
-#   Lưu ý: dùng bản instance có Disk (paid) để dữ liệu bền vững,
-#   hoặc dùng free tier cho demo ngắn hạn (DB bị xoá khi restart).
+#
+#   LƯU Ý QUAN TRỌNG:
+#   - Bản FREE của Render KHÔNG hỗ trợ Disk -> không khai báo disk ở đây.
+#     Database (database.db) + upload sẽ nằm trong filesystem tạm của instance,
+#     nên khi server ngủ/restart, dữ liệu sẽ QUAY VỀ dữ liệu mẫu ban đầu.
+#     Đủ để demo / nộp bài; muốn bán hàng thật lâu dài thì nâng lên
+#     bản Starter (có Disk) và thêm khối `disk` như trong README.
+#   - ADMIN_PASSWORD: Render sẽ hỏi riêng khi tạo service (không hardcode).
 # ============================================================
 services:
   - type: web
@@ -19,13 +25,7 @@ services:
         value: 0.0.0.0
       - key: PORT
         value: 3000
-      - key: DATABASE_PATH
-        value: /var/data/database.db
-      - key: UPLOAD_DIR
-        value: /var/data/uploads
+      # Bỏ DATABASE_PATH + UPLOAD_DIR: server tự dùng database.db và uploads/
+      # trong thư mục dự án (hành vi mặc định).
       - key: ADMIN_PASSWORD
         sync: false      # bạn nhập mật khẩu admin riêng khi tạo service
-    disk:
-      name: shancha-data
-      mountPath: /var/data
-      sizeGB: 1

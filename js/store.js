@@ -385,6 +385,15 @@ const Store = (function () {
     cache.users = cache.users.filter((u) => u.id !== id);
   }
 
+  /* ---------- Tạo người dùng mới (admin — nhân viên/khách) ---------- */
+  async function createUser({ name, username, email, phone, password, role }) {
+    const data = await api("POST", "/api/users", {
+      name, username, email, phone, password, role: role || 'staff'
+    });
+    cache.users.unshift(data.user);
+    return data.user;
+  }
+
   /* ---------- Vai trò ---------- */
   function isStaff() {
     return !!cache.me && (cache.me.role === "staff" || cache.me.role === "admin");
@@ -716,6 +725,7 @@ const Store = (function () {
     isAdmin,
     updateUser,
     deleteUser,
+    createUser,
     getCart,
     setCart,
     cartCount,

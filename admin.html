@@ -487,7 +487,10 @@
     <!-- Khách hàng -->
     <section id="view-users" style="display:none">
       <div class="panel">
-        <div class="panel-head"><h2>Quản lý khách hàng</h2></div>
+        <div class="panel-head">
+          <h2>Quản lý khách hàng</h2>
+          <button class="btn btn-primary btn-sm" id="btn-new-user">+ Thêm nhân viên</button>
+        </div>
         <div class="table-wrap"><table class="table" id="adm-users-table"></table></div>
         <div class="pager" id="adm-users-pager"></div>
       </div>
@@ -526,6 +529,28 @@
           <div class="form-group full"><label>Ảnh story 1</label><input type="text" id="st-story-img-1" placeholder="assets/images/story-1.svg"></div>
           <div class="form-group full"><label>Ảnh story 2</label><input type="text" id="st-story-img-2" placeholder="assets/images/story-2.svg"></div>
           <div class="form-group full"><label>Ảnh story 3</label><input type="text" id="st-story-img-3" placeholder="assets/images/story-3.svg"></div>
+
+          <div class="form-group full" style="border-top:1px solid var(--line);padding-top:14px;margin-top:6px">
+            <label style="font-weight:700">Trang Giới thiệu — Giá trị cốt lõi</label>
+            <div id="about-values-editor"></div>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-add-value">+ Thêm giá trị</button>
+          </div>
+          <div class="form-group full">
+            <label style="font-weight:700">Trang Giới thiệu — Hành trình</label>
+            <div id="about-journey-editor"></div>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-add-journey">+ Thêm mốc thời gian</button>
+          </div>
+
+          <div class="form-group full" style="border-top:1px solid var(--line);padding-top:14px;margin-top:6px">
+            <label style="font-weight:700">Nhạc quán trà</label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+              <input type="text" id="st-music-name" placeholder="Tên bài nhạc (vd: Nhạc quán trà – Chill)" style="flex:1;min-width:180px">
+              <input type="url" id="st-music-url" placeholder="Link nhạc mp3 (https://...) hoặc để trống = nhạc tự sinh" style="flex:2;min-width:220px">
+            </div>
+            <input type="file" id="st-music-file" accept="audio/*" style="max-width:200px">
+            <div class="form-hint" style="font-size:.78rem;color:var(--muted)">Nếu có link/file nhạc, nút "Phát nhạc" sẽ phát bài đó; để trống thì dùng giai điệu quán trà tự sinh.</div>
+          </div>
+
           <div class="crud-actions full"><button class="btn btn-primary" type="submit">Lưu cài đặt</button></div>
         </form>
       </div>
@@ -549,6 +574,30 @@
     <div class="modal-card small">
       <button class="modal-close" id="order-modal-close" aria-label="Đóng">×</button>
       <div style="padding:26px" id="order-modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Modal thêm nhân viên -->
+  <div class="modal" id="user-modal" style="display:none">
+    <div class="modal-card small">
+      <button class="modal-close" id="user-modal-close" aria-label="Đóng">×</button>
+      <div style="padding:26px">
+        <h3 style="margin:0 0 16px">Thêm nhân viên / tài khoản mới</h3>
+        <form class="crud-form" id="user-form">
+          <div class="form-group"><label>Họ tên *</label><input type="text" id="nu-name" required></div>
+          <div class="form-group"><label>Tên đăng nhập * (3–30 ký tự, chữ thường/số/_ )</label><input type="text" id="nu-username" required pattern="[a-z0-9_]{3,30}"></div>
+          <div class="form-group"><label>Email</label><input type="email" id="nu-email"></div>
+          <div class="form-group"><label>Số điện thoại</label><input type="text" id="nu-phone" placeholder="0901234567"></div>
+          <div class="form-group"><label>Mật khẩu * (≥6 ký tự)</label><input type="password" id="nu-password" required minlength="6"></div>
+          <div class="form-group"><label>Vai trò</label>
+            <select id="nu-role">
+              <option value="staff">Nhân viên (staff)</option>
+              <option value="customer">Khách hàng</option>
+            </select>
+          </div>
+          <div class="crud-actions full"><button class="btn btn-primary" type="submit">Tạo tài khoản</button></div>
+        </form>
+      </div>
     </div>
   </div>
 

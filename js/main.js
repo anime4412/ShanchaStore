@@ -108,13 +108,18 @@ document.addEventListener('DOMContentLoaded', async () => {
      - Tự chạy 4,5 giây/lần, có nút ‹ ›, chấm tròn, vuốt tay (mobile).
      - go(n, manual): chuyển slide; manual=true thì đặt lại bộ đếm giờ. */
   const slider = document.getElementById('hero-slider');
+  function bannerSrc(img) {
+    if (!img) return '';
+    if (img.indexOf('data:') === 0 || img.indexOf('http') === 0 || img.indexOf('assets/') === 0) return img;
+    return 'assets/images/' + img;
+  }
   function renderBanners() {
     const banners = Store.getBanners().filter(b => b.active);
     if (!slider) return;
     slider.innerHTML =
       banners.map((b, i) =>
         '<div class="slide' + (i === 0 ? ' active' : '') + '">' +
-        '<img src="' + (b.img.indexOf('data:') === 0 || b.img.indexOf('http') === 0 ? b.img : 'assets/images/' + b.img) + '" alt="' + UI.esc(b.title || 'Banner') + '">' +
+        '<img src="' + bannerSrc(b.img) + '" alt="' + UI.esc(b.title || 'Banner') + '">' +
         '<div class="slide-overlay"></div>' +
         '<div class="slide-caption">' +
         (b.title ? '<div class="slide-title">' + UI.esc(b.title) + '</div>' : '') +
@@ -241,8 +246,33 @@ document.addEventListener('DOMContentLoaded', async () => {
      (nốt Do Re Mi Sol La) sinh bằng code mỗi 0,55 giây — không cần file nhạc.
      Bấm lần nữa -> tạm dừng. */
   const AudioPlayer = (function () {
-    let ctx = null, master = null, playing = false, timer = null;
+    let ctx = null, master = null, playing = false, timer = null, audioEl = null;
     const btn = document.getElementById('btn-media');
+
+    /* Nếu admin đã đặt nhạc (link/file) trong Cài đặt -> phát bài đó;
+       nếu không -> giai điệu pentatonic tự sinh (fallback cũ). */
+    const settings = Store.getSettings();
+    const musicUrl = (settings.musicUrl || '').trim();
+    const musicName = (settings.musicName || '').trim() || 'Nhạc quán trà – Chill';
+    const titleEl = document.querySelector('.media-info b');
+    if (titleEl) titleEl.textContent = musicName;
+
+    function playFile() {
+      if (!audioEl) {
+        audioEl = new Audio(musicUrl);
+        audioEl.loop = true;
+        audioEl.addEventListener('ended', () => { playing = false; stopUI(); });
+      }
+      audioEl.play().catch(() => {
+        UI.toast('Không phát được nhạc. Kiểm tra lại link/file trong Cài đặt.', 'warn');
+        stopUI();
+      });
+    }
+    function stopUI() {
+      playing = false;
+      if (timer) { clearInterval(timer); timer = null; }
+      btn.innerHTML = UI.icon('play') + ' Phát nhạc';
+    }
 
     // giai điệu pentatonic nhẹ (nốt: Do Re Mi Sol La)
     const notes = [261.63, 293.66, 329.63, 392.00, 440.00, 523.25];
@@ -268,6 +298,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }, 550);
     }
     function start() {
+      if (musicUrl) { playFile(); playing = true; btn.innerHTML = UI.icon('pause') + ' Tạm dừng'; UI.toast('Đang phát: ' + musicName, 'ok'); return; }
       if (!ctx) {
         ctx = new (window.AudioContext || window.webkitAudioContext)();
         master = ctx.createGain();
@@ -283,6 +314,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     function stop() {
       playing = false;
       if (timer) { clearInterval(timer); timer = null; }
+      if (audioEl) { audioEl.pause(); audioEl.currentTime = 0; }
       btn.innerHTML = UI.icon('play') + ' Phát nhạc';
     }
     btn.addEventListener('click', () => (playing ? stop() : start()));

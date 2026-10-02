@@ -252,7 +252,23 @@ const DEFAULT_SETTINGS = {
   logo: 'assets/images/logo.svg',
   themeColor: '#C97B4A',
   salePercent: 20,
-  saleEndsAt: Date.now() + 2 * 24 * 60 * 60 * 1000
+  saleEndsAt: Date.now() + 2 * 24 * 60 * 60 * 1000,
+  /* Trang Giới thiệu (About) — admin quản lý */
+  aboutValues: [
+    { icon: 'leaf',   title: 'Nguyên liệu thật', desc: 'Trà nguyên chất từ vùng cao Đà Lạt, chọn lọc từng búp trà theo mùa.' },
+    { icon: 'flask',  title: 'Pha chế thủ công', desc: 'Mỗi ly được pha chế tỉ mỉ bởi đội ngũ barista đam mê trà.' },
+    { icon: 'heart',  title: 'Chăm sóc khách', desc: 'Không gian ấm cúng, phục vụ tận tâm — khách là người nhà.' },
+    { icon: 'tag',    title: 'Giá minh bạch', desc: 'Giá công bằng cho chất lượng thật, ưu đãi rõ ràng cho khách quen.' }
+  ],
+  aboutJourney: [
+    { year: '2019', desc: 'Khởi nguồn từ một xe trà nhỏ trên đường 3/2, Đà Lạt với đúng 3 món trà sữa.' },
+    { year: '2021', desc: 'Mở chi nhánh đầu tiên tại TP.HCM, đưa hương trà cao nguyên về thành phố.' },
+    { year: '2023', desc: 'Ra mắt bộ sưu tập trà signature: Ôlong Gạo Rang, Hojicha Caramel Mặn, Matcha Hạt Sen…' },
+    { year: '2026', desc: 'ShanCha Store — mua trà online mọi lúc mọi nơi, giao tận nơi hoặc nhận tại quán.' }
+  ],
+  /* Nhạc quán trà (Cài đặt) */
+  musicName: 'Nhạc quán trà – Chill',
+  musicUrl: ''
 };
 
 function getSettings() {
@@ -306,9 +322,9 @@ function seed() {
   if (db.prepare('SELECT COUNT(*) AS n FROM banners').get().n === 0) {
     const stmt = db.prepare('INSERT INTO banners (img, title, sub, link, sort, active) VALUES (?, ?, ?, ?, ?, 1)');
     [
-      ['assets/images/banner-1.jpg', 'SƠN TRÀ', 'Trà trên núi – hương vị từ Đà Lạt', 'products.html', 1],
-      ['assets/images/banner-2.jpg', 'SIGNATURE TEA', 'Công thức truyền thống, chuẩn vị', 'index.html#story', 2],
-      ['assets/images/banner-3.jpg', 'FLASH SALE', 'Giảm đến 30% cho trà sữa ôlong', 'index.html#sale', 3]
+      ['assets/images/banners/banner-1.jpg', 'SƠN TRÀ', 'Trà trên núi – hương vị từ Đà Lạt', 'products.html', 1],
+      ['assets/images/banners/banner-2.jpg', 'SIGNATURE TEA', 'Trà ủ lạnh thanh mát mỗi ngày', 'index.html#story', 2],
+      ['assets/images/banners/banner-3.jpg', 'FLASH SALE', 'Giảm đến 30% cho trà sữa ôlong', 'index.html#sale', 3]
     ].forEach(b => stmt.run(b[0], b[1], b[2], b[3], b[4]));
   }
   if (db.prepare('SELECT COUNT(*) AS n FROM customer_reviews').get().n === 0) {
@@ -1177,6 +1193,34 @@ async function handleApi(req, res, u) {
       if (blocked) db.prepare('DELETE FROM sessions WHERE userId = ?').run(m[1]);
       audit(admin, role !== row.role ? 'ADMIN_CHANGE_ROLE' : 'ADMIN_UPDATE_USER', 'user', m[1], { name: b.name || row.name, role, blocked });
       return ok({ user: rowToUser(db.prepare('SELECT * FROM users WHERE id = ?').get(m[1])) });
+    }
+
+    /* ---------- Tạo người dùng mới (admin — nhân viên/khách) ---------- */
+    if (method === 'POST' && p === '/api/users') {
+      const admin = needAdmin(); if (!admin) return;
+      const b = await readBody(req);
+      const name = String(b.name || '').trim().slice(0, 60);
+      const username = String(b.username || '').trim().toLowerCase().slice(0, 30);
+      const email = String(b.email || '').trim().slice(0, 120);
+      const phone = String(b.phone || '').trim().slice(0, 15);
+      const password = String(b.password || '');
+      const role = ['staff', 'customer'].includes(b.role) ? b.role : 'staff';
+
+      if (name.length < 2) return fail(400, 'Họ tên phải có ít nhất 2 ký tự.');
+      if (!/^[a-z0-9_]{3,30}$/.test(username)) return fail(400, 'Tên đăng nhập 3–30 ký tự (chữ thường, số, gạch dưới).');
+      if (email && !reEmail.test(email)) return fail(400, 'Email không đúng định dạng.');
+      if (phone && !rePhone.test(phone)) return fail(400, 'Số điện thoại không đúng định dạng (VD: 0901234567).');
+      if (password.length < 6 || password.length > 72) return fail(400, 'Mật khẩu phải từ 6 đến 72 ký tự.');
+      if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username)) return fail(409, 'Tên đăng nhập đã tồn tại.');
+      if (email && db.prepare('SELECT 1 FROM users WHERE email = ?').get(email)) return fail(409, 'Email đã được đăng ký.');
+
+      const id = 'u-' + Date.now().toString(36) + crypto.randomBytes(3).toString('hex');
+      const { salt, hash } = hashPassword(password);
+      db.prepare(
+        'INSERT INTO users (id, name, username, pass_salt, pass_hash, email, phone, role, blocked, created, status, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, \'active\', ?)'
+      ).run(id, name, username, salt, hash, email, phone, role, Date.now(), Date.now());
+      audit(admin, 'ADMIN_CREATE_USER', 'user', id, { name, username, role });
+      return ok({ user: rowToUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)) });
     }
 
     /* ---------- Xoá khách hàng (admin) ---------- */

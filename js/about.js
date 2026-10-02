@@ -40,6 +40,47 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   renderStory();
 
+  /* ---------- Giá trị cốt lõi (render từ settings.aboutValues) ---------- */
+  function renderValues() {
+    const grid = document.getElementById('about-values-grid');
+    if (!grid) return;
+    const s = Store.getSettings();
+    const list = (s.aboutValues && s.aboutValues.length ? s.aboutValues : [
+      { icon: 'leaf',  title: 'Nguyên liệu thật', desc: 'Trà nguyên chất từ vùng cao Đà Lạt, chọn lọc từng búp trà theo mùa.' },
+      { icon: 'flask', title: 'Pha chế thủ công', desc: 'Mỗi ly được pha chế tỉ mỉ bởi đội ngũ barista đam mê trà.' },
+      { icon: 'heart', title: 'Chăm sóc khách', desc: 'Không gian ấm cúng, phục vụ tận tâm — khách là người nhà.' },
+      { icon: 'tag',   title: 'Giá minh bạch', desc: 'Giá công bằng cho chất lượng thật, ưu đãi rõ ràng cho khách quen.' }
+    ]);
+    grid.innerHTML = list.map(v =>
+      '<div class="about-value">' +
+      '<span class="ic-big">' + (UI.icon(v.icon || 'leaf') || '') + '</span>' +
+      '<h3>' + UI.esc(v.title || '') + '</h3>' +
+      '<p>' + UI.esc(v.desc || '') + '</p>' +
+      '</div>'
+    ).join('');
+  }
+  renderValues();
+
+  /* ---------- Hành trình (render từ settings.aboutJourney) ---------- */
+  function renderJourney() {
+    const tl = document.getElementById('about-journey');
+    if (!tl) return;
+    const s = Store.getSettings();
+    const list = (s.aboutJourney && s.aboutJourney.length ? s.aboutJourney : [
+      { year: '2019', desc: 'Khởi nguồn từ một xe trà nhỏ trên đường 3/2, Đà Lạt với đúng 3 món trà sữa.' },
+      { year: '2021', desc: 'Mở chi nhánh đầu tiên tại TP.HCM, đưa hương trà cao nguyên về thành phố.' },
+      { year: '2023', desc: 'Ra mắt bộ sưu tập trà signature: Ôlong Gạo Rang, Hojicha Caramel Mặn, Matcha Hạt Sen…' },
+      { year: '2026', desc: 'ShanCha Store — mua trà online mọi lúc mọi nơi, giao tận nơi hoặc nhận tại quán.' }
+    ]);
+    tl.innerHTML = list.map(j =>
+      '<div class="about-step">' +
+      '<b>' + UI.esc(j.year || '') + '</b>' +
+      '<p>' + UI.esc(j.desc || '') + '</p>' +
+      '</div>'
+    ).join('');
+  }
+  renderJourney();
+
   /* ---------- Chi nhánh ---------- */
   function renderStores() {
     const grid = document.getElementById('about-stores-grid');

@@ -1573,10 +1573,84 @@ const Admin = (function () {
     document.getElementById('st-story-img-1').value = (s.storyImgs && s.storyImgs[0]) || 'assets/images/story-1.svg';
     document.getElementById('st-story-img-2').value = (s.storyImgs && s.storyImgs[1]) || 'assets/images/story-2.svg';
     document.getElementById('st-story-img-3').value = (s.storyImgs && s.storyImgs[2]) || 'assets/images/story-3.svg';
+    /* nhạc quán trà */
+    document.getElementById('st-music-name').value = s.musicName || '';
+    document.getElementById('st-music-url').value = s.musicUrl || '';
+    /* Trang Giới thiệu — giá trị + hành trình */
+    renderAboutEditors(s);
     // preview logo
     const prev = document.getElementById('st-logo-preview');
     prev.innerHTML = s.logo ? '<img src="' + s.logo + '" alt="logo" style="height:38px;border:1px solid var(--line);border-radius:8px;padding:4px;background:var(--bg)">' : '';
   }
+  // upload logo file -> base64
+  /* ---------- Trang Giới thiệu: editors (giá trị + hành trình) ---------- */
+  function renderAboutEditors(s) {
+    const valuesBox = document.getElementById('about-values-editor');
+    const journeyBox = document.getElementById('about-journey-editor');
+    if (!valuesBox || !journeyBox) return;
+    const values = (s.aboutValues && s.aboutValues.length ? s.aboutValues : [
+      { icon: 'leaf',  title: 'Nguyên liệu thật', desc: 'Trà nguyên chất từ vùng cao Đà Lạt, chọn lọc từng búp trà theo mùa.' },
+      { icon: 'flask', title: 'Pha chế thủ công', desc: 'Mỗi ly được pha chế tỉ mỉ bởi đội ngũ barista đam mê trà.' },
+      { icon: 'heart', title: 'Chăm sóc khách', desc: 'Không gian ấm cúng, phục vụ tận tâm — khách là người nhà.' },
+      { icon: 'tag',   title: 'Giá minh bạch', desc: 'Giá công bằng cho chất lượng thật, ưu đãi rõ ràng cho khách quen.' }
+    ]);
+    const journey = (s.aboutJourney && s.aboutJourney.length ? s.aboutJourney : [
+      { year: '2019', desc: 'Khởi nguồn từ một xe trà nhỏ trên đường 3/2, Đà Lạt với đúng 3 món trà sữa.' },
+      { year: '2021', desc: 'Mở chi nhánh đầu tiên tại TP.HCM, đưa hương trà cao nguyên về thành phố.' },
+      { year: '2023', desc: 'Ra mắt bộ sưu tập trà signature: Ôlong Gạo Rang, Hojicha Caramel Mặn, Matcha Hạt Sen…' },
+      { year: '2026', desc: 'ShanCha Store — mua trà online mọi lúc mọi nơi, giao tận nơi hoặc nhận tại quán.' }
+    ]);
+    valuesBox.innerHTML = values.map((v, i) =>
+      '<div class="about-editor-row" data-row="' + i + '" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">' +
+      '<input type="text" class="av-icon" placeholder="icon (leaf/flask/heart/tag)" value="' + UI.esc(v.icon || '') + '" style="flex:0 0 130px">' +
+      '<input type="text" class="av-title" placeholder="Tiêu đề" value="' + UI.esc(v.title || '') + '" style="flex:1;min-width:120px">' +
+      '<input type="text" class="av-desc" placeholder="Mô tả" value="' + UI.esc(v.desc || '') + '" style="flex:2;min-width:160px">' +
+      '<button type="button" class="icon-btn danger av-del" title="Xoá">' + UI.icon('trash') + '</button>' +
+      '</div>'
+    ).join('');
+    journeyBox.innerHTML = journey.map((j, i) =>
+      '<div class="aj-row" data-row="' + i + '" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">' +
+      '<input type="text" class="aj-year" placeholder="Năm (2019)" value="' + UI.esc(j.year || '') + '" style="flex:0 0 90px">' +
+      '<input type="text" class="aj-desc" placeholder="Mô tả mốc thời gian" value="' + UI.esc(j.desc || '') + '" style="flex:3;min-width:180px">' +
+      '<button type="button" class="icon-btn danger aj-del" title="Xoá">' + UI.icon('trash') + '</button>' +
+      '</div>'
+    ).join('');
+    valuesBox.querySelectorAll('.av-del').forEach(b => {
+      b.addEventListener('click', () => {
+        b.closest('.about-editor-row').remove();
+      });
+    });
+    journeyBox.querySelectorAll('.aj-del').forEach(b => {
+      b.addEventListener('click', () => {
+        b.closest('.aj-row').remove();
+      });
+    });
+  }
+  document.getElementById('btn-add-value').addEventListener('click', () => {
+    const box = document.getElementById('about-values-editor');
+    if (!box) return;
+    box.insertAdjacentHTML('beforeend',
+      '<div class="about-editor-row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">' +
+      '<input type="text" class="av-icon" placeholder="icon" style="flex:0 0 130px">' +
+      '<input type="text" class="av-title" placeholder="Tiêu đề" style="flex:1;min-width:120px">' +
+      '<input type="text" class="av-desc" placeholder="Mô tả" style="flex:2;min-width:160px">' +
+      '<button type="button" class="icon-btn danger av-del" title="Xoá">' + UI.icon('trash') + '</button>' +
+      '</div>'
+    );
+    box.lastElementChild.querySelector('.av-del').addEventListener('click', function () { this.closest('.about-editor-row').remove(); });
+  });
+  document.getElementById('btn-add-journey').addEventListener('click', () => {
+    const box = document.getElementById('about-journey-editor');
+    if (!box) return;
+    box.insertAdjacentHTML('beforeend',
+      '<div class="aj-row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">' +
+      '<input type="text" class="aj-year" placeholder="Năm (2019)" style="flex:0 0 90px">' +
+      '<input type="text" class="aj-desc" placeholder="Mô tả mốc thời gian" style="flex:3;min-width:180px">' +
+      '<button type="button" class="icon-btn danger aj-del" title="Xoá">' + UI.icon('trash') + '</button>' +
+      '</div>'
+    );
+    box.lastElementChild.querySelector('.aj-del').addEventListener('click', function () { this.closest('.aj-row').remove(); });
+  });
   // upload logo file -> base64
   document.getElementById('st-logo-file').addEventListener('change', e => {
     const f = e.target.files[0];
@@ -1585,6 +1659,17 @@ const Admin = (function () {
     reader.onload = ev => {
       document.getElementById('st-logo').value = ev.target.result;
       document.getElementById('st-logo-preview').innerHTML = '<img src="' + ev.target.result + '" alt="logo" style="height:38px;border:1px solid var(--line);border-radius:8px;padding:4px;background:var(--bg)">';
+    };
+    reader.readAsDataURL(f);
+  });
+  // upload file nhạc -> base64 vào ô link nhạc
+  document.getElementById('st-music-file').addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      document.getElementById('st-music-url').value = ev.target.result;
+      UI.toast('Đã nạp file nhạc. Bấm Lưu cài đặt để áp dụng.', 'ok');
     };
     reader.readAsDataURL(f);
   });
@@ -1629,10 +1714,66 @@ const Admin = (function () {
       document.getElementById('st-story-img-2').value.trim(),
       document.getElementById('st-story-img-3').value.trim()
     ];
+    /* nhạc quán trà */
+    s.musicName = document.getElementById('st-music-name').value.trim();
+    const musicUrlField = document.getElementById('st-music-url');
+    s.musicUrl = (musicUrlField ? musicUrlField.value : '').trim();
+    /* Trang Giới thiệu — giá trị + hành trình */
+    const valuesBox = document.getElementById('about-values-editor');
+    if (valuesBox) {
+      s.aboutValues = [...valuesBox.querySelectorAll('.about-editor-row')].map(r => ({
+        icon: r.querySelector('.av-icon').value.trim(),
+        title: r.querySelector('.av-title').value.trim(),
+        desc: r.querySelector('.av-desc').value.trim()
+      })).filter(v => v.title || v.desc);
+    }
+    const journeyBox = document.getElementById('about-journey-editor');
+    if (journeyBox) {
+      s.aboutJourney = [...journeyBox.querySelectorAll('.aj-row')].map(r => ({
+        year: r.querySelector('.aj-year').value.trim(),
+        desc: r.querySelector('.aj-desc').value.trim()
+      })).filter(j => j.year || j.desc);
+    }
     try {
       await Store.setSettings(s);
       applySettings();
       UI.toast('Đã lưu cài đặt website.', 'ok');
+    } catch (err) {
+      UI.toast(err.message, 'danger');
+    }
+  });
+
+  /* ---------- Modal thêm nhân viên / tài khoản ---------- */
+  const userModal = document.getElementById('user-modal');
+  function openUserModal() {
+    if (!userModal) return;
+    userModal.style.display = 'flex';
+    document.getElementById('user-form').reset();
+    document.getElementById('nu-username').focus();
+  }
+  function closeUserModal() {
+    if (userModal) userModal.style.display = 'none';
+  }
+  const btnNewUser = document.getElementById('btn-new-user');
+  if (btnNewUser) btnNewUser.addEventListener('click', openUserModal);
+  const userModalClose = document.getElementById('user-modal-close');
+  if (userModalClose) userModalClose.addEventListener('click', closeUserModal);
+  if (userModal) userModal.addEventListener('click', e => { if (e.target === userModal) closeUserModal(); });
+  document.getElementById('user-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const payload = {
+      name: document.getElementById('nu-name').value.trim(),
+      username: document.getElementById('nu-username').value.trim().toLowerCase(),
+      email: document.getElementById('nu-email').value.trim(),
+      phone: document.getElementById('nu-phone').value.trim(),
+      password: document.getElementById('nu-password').value,
+      role: document.getElementById('nu-role').value
+    };
+    try {
+      await Store.createUser(payload);
+      UI.toast('Đã tạo tài khoản ' + (payload.role === 'staff' ? 'nhân viên' : 'khách hàng') + ' ' + payload.name + '.', 'ok');
+      closeUserModal();
+      renderUsers();
     } catch (err) {
       UI.toast(err.message, 'danger');
     }
